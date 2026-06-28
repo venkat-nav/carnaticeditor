@@ -1,0 +1,15 @@
+TALA:adi
+TEMPO:160
+Avartanam 1:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
+Avartanam 2:  || ^r^r^g^s ^s^rdd ^sppd ggpr | rgsr rggp | pdd^s ^sd^r^r ||
+Avartanam 3:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
+Avartanam 4:  || Dd^s ,ppd Ggp ,rrg | Ssr ,ggr | Ppg ,dpd ||
+Avartanam 5:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
+Avartanam 6:  || Dd^g ,^r^r^g Pp^r ,^s^s^r | Gg^s ,dd^s | rpgd p^sd^r ||
+Avartanam 7:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
+Avartanam 8:  || ^S^r^g ^r^s^R ^s^r^sd ^Sd^s | dpD gppd | d^sd^r ^R; ||
+Avartanam 9:  || ^r^r^gd ,^s^s^r Pdd sGp | pdR ggps | rpgd p^sd^r ||
+Avartanam 10:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
+Avartanam 11:  || ^S^r^g ^r^s^R d^sd^r ,^r^s^r | ^s^G^g ^r^g^r^p | ,^p^g^p ^r^G^g ||
+Avartanam 12:  || ^s^r^g^s ,^sdp d^sP grsr | gS, RG | gppd d^sd^r ||
+Avartanam 13:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
