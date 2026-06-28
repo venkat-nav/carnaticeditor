@@ -1,4 +1,5 @@
 TALA:adi
+SCALE:mohanam
 TEMPO:160
 Avartanam 1:  || ^S,d pgrd P,g rs_dr | S,_d _p_dsr | ,Gp ,D^r ||
 Avartanam 2:  || ^r^r^g^s ^s^rdd ^sppd ggpr | rgsr rggp | pdd^s ^sd^r^r ||
