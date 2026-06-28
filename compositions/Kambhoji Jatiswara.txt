@@ -1,0 +1,17 @@
+TALA:adi
+SCALE:kambhoji
+TEMPO:160
+Avartanam 1:  || ^S,^s n3Pd ^S,d ^rNd | P,d mGr | S,r gmpd ||
+Avartanam 2:  || ^s^r^sn dpmg rgrs _n_d_p_d | S,r gmpd | ^S,m gpd^s ||
+Avartanam 3:  || [pd^s^r^g^r]^s n3Pd ^S,d ^rNd | P,d mGr | S,r gmpd ||
+Avartanam 4:  || d^snd pmG ndpm grS | dpmg rS, | pmrg s_n_D ||
+Avartanam 5:  || pdsr gM, pd^sn dpD | ^sndp d^S, | ^r^g^r^s ndP ||
+Avartanam 6:  || [d^sndpd]^s n3Pd ^S,d ^rNd | P,d mGr | S,r gmpd ||
+Avartanam 7:  || ^R,^g ^S,^r D,^s P,d | M,p G,m | R,g S,s ||
+Avartanam 8:  || n3Pd srgm pDm gpd^s | nDp ds^r^g | ^rSm grsn ||
+Avartanam 9:  || [dPmpd]^s n3Pd ^S,d ^rNd | P,d mGr | S,r gmpd ||
+Avartanam 10:  || ^m^g^r^g ^r^m^g^r ^s^g^r^s ^r^snd | pd^sn dpmg | rmgr sndp ||
+Avartanam 11:  || S,g rs_n_d _p_dsr gsrg | Mpd ndpd | mGp dsrg ||
+Avartanam 12:  || r^Sn dpd^s ^r^snd pMg | pD^s ndpd | ^sNd pmG ||
+Avartanam 13:  || rGm pdmg pd^sp d^s^r^g | ^R,^s ndpd | ^S,^r ^g^m^g^r ||
+Avartanam 14:  || ^S,^s n3Pd ^S,d ^rNd | P,d mGr | S,r gmpd ||
