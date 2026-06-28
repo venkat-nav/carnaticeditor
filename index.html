@@ -98,6 +98,7 @@
   .avartana-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
   .avartana-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
   .remove-line { font-size: 12px; height: 28px; padding: 4px 10px; }
+  .head-actions { display: flex; gap: 6px; }
 
   .grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
   .anga-block { display: flex; flex-direction: column; gap: 6px; }
@@ -418,7 +419,7 @@ function validateAnga(lineObj, angaIdx){
   }
 }
 
-function addLine(restoreBeats){
+function addLine(restoreBeats, afterId){
   lineCounter++;
   var id = lineCounter;
   var container = document.createElement("div");
@@ -429,6 +430,28 @@ function addLine(restoreBeats){
   var title = document.createElement("div");
   title.className = "avartana-title";
   title.textContent = "Avartanam " + id;
+
+  var actions = document.createElement("div");
+  actions.className = "head-actions";
+
+  var upBtn = document.createElement("button");
+  upBtn.className = "remove-line";
+  upBtn.textContent = "↑";
+  upBtn.title = "Move up";
+  upBtn.addEventListener("click", function(){ moveLineUp(id); });
+
+  var dnBtn = document.createElement("button");
+  dnBtn.className = "remove-line";
+  dnBtn.textContent = "↓";
+  dnBtn.title = "Move down";
+  dnBtn.addEventListener("click", function(){ moveLineDn(id); });
+
+  var copyBtn = document.createElement("button");
+  copyBtn.className = "remove-line";
+  copyBtn.textContent = "Copy";
+  copyBtn.title = "Duplicate this avartanam below";
+  copyBtn.addEventListener("click", function(){ copyLine(id); });
+
   var removeBtn = document.createElement("button");
   removeBtn.className = "remove-line";
   removeBtn.textContent = "Remove";
@@ -438,14 +461,26 @@ function addLine(restoreBeats){
     renumber();
     scheduleSave();
   });
+
+  actions.appendChild(upBtn);
+  actions.appendChild(dnBtn);
+  actions.appendChild(copyBtn);
+  actions.appendChild(removeBtn);
   head.appendChild(title);
-  head.appendChild(removeBtn);
+  head.appendChild(actions);
   container.appendChild(head);
 
-  linesWrap.appendChild(container);
-
   var lineObj = { id: id, container: container, titleEl: title, beats: [] };
-  lines.push(lineObj);
+
+  if (afterId !== undefined){
+    var afterIdx = lines.findIndex(function(l){ return l.id === afterId; });
+    linesWrap.insertBefore(container, lines[afterIdx].container.nextSibling);
+    lines.splice(afterIdx + 1, 0, lineObj);
+  } else {
+    linesWrap.appendChild(container);
+    lines.push(lineObj);
+  }
+
   buildLine(id, restoreBeats);
 }
 
@@ -453,6 +488,40 @@ function renumber(){
   lines.forEach(function(l, idx){
     l.titleEl.textContent = "Avartanam " + (idx + 1);
   });
+}
+
+function moveLineUp(id){
+  var idx = lines.findIndex(function(l){ return l.id === id; });
+  if (idx <= 0) return;
+  var prev = lines[idx - 1];
+  var curr = lines[idx];
+  linesWrap.insertBefore(curr.container, prev.container);
+  lines[idx - 1] = curr;
+  lines[idx] = prev;
+  renumber();
+  scheduleSave();
+}
+
+function moveLineDn(id){
+  var idx = lines.findIndex(function(l){ return l.id === id; });
+  if (idx >= lines.length - 1) return;
+  var next = lines[idx + 1];
+  var curr = lines[idx];
+  linesWrap.insertBefore(next.container, curr.container);
+  lines[idx + 1] = curr;
+  lines[idx] = next;
+  renumber();
+  scheduleSave();
+}
+
+function copyLine(id){
+  var lineObj = lines.find(function(l){ return l.id === id; });
+  var restoreBeats = lineObj.beats.map(function(bd){
+    return { raw: bd.raw, octaves: bd.tokens.filter(function(t){ return !t.carry; }).map(function(t){ return t.octave; }) };
+  });
+  addLine(restoreBeats, id);
+  renumber();
+  scheduleSave();
 }
 
 function rebuildAllLines(){
@@ -690,8 +759,7 @@ exportPdfBtn.addEventListener("click", function(){
       }
       return '<span class="anga">' + beatsHtml.join('') + '</span>';
     }).join('<span class="bar">|</span>');
-    return '<div class="avartanam"><div class="avnum">Avartanam ' + (li+1) + '</div>' +
-      '<div class="line"><span class="bar">&#8214;</span>' + angaHtml + '<span class="bar">&#8214;</span></div></div>';
+    return '<div class="avartanam"><div class="line"><span class="bar">&#8214;</span>' + angaHtml + '<span class="bar">&#8214;</span></div></div>';
   }).join("");
 
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Jatiswaram notation</title><style>' +
@@ -699,8 +767,7 @@ exportPdfBtn.addEventListener("click", function(){
     'h1{font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;margin:0 0 4px;}' +
     '.sub{font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#993c1d;margin:0 0 20px;font-style:italic;}' +
     'hr{border:none;border-top:1.5px solid #993c1d;margin:0 0 28px;}' +
-    '.avartanam{margin-bottom:18px;}' +
-    '.avnum{font-family:Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;color:#993c1d;margin-bottom:6px;}' +
+    '.avartanam{margin-bottom:2em;}' +
     '.line{font-size:16px;letter-spacing:0.3px;display:flex;align-items:center;white-space:nowrap;}' +
     '.anga{display:flex;flex-shrink:0;}' +
     '.beat{display:inline-flex;align-items:center;justify-content:center;width:52px;flex-shrink:0;text-align:center;}' +
