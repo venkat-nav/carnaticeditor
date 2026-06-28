@@ -117,6 +117,8 @@
   }
   .count-tag { font-size: 10px; color: var(--text-muted); }
   .anga-total { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+  .split-btn { font-size: 10px; height: 18px; padding: 0 6px; border-radius: 4px; margin-top: 1px; }
+  .chip.chip-fast { color: var(--text-accent); border-color: var(--text-accent); }
 
   .anga-laghu      { background: var(--c-teal-50); }
   .anga-dhrutam    { background: var(--c-coral-50); }
@@ -162,6 +164,8 @@
     Each beat = 4 counts. Type the group per beat, e.g. <code>S,d</code> or <code>pgrd</code>.
     Lowercase = 1 count, capital = 2 counts, <code>,</code> = +1, <code>;</code> = +2.
     A leading <code>,</code> or <code>;</code> carries the previous beat's note forward.
+    Wrap notes in <code>[...]</code> to play them at double speed (each takes half a count). Use the <code>[2×]</code> button to wrap selected text.
+    Add a digit suffix for swara variants, e.g. <code>n3</code> or <code>r2</code>.
     Click a note chip below the box to cycle its octave (middle &rarr; upper dot &rarr; lower dot).
   </div>
 
@@ -192,11 +196,20 @@ var TALAS = {
 
 var ANGA_CLASS = { laghu:"anga-laghu", dhrutam:"anga-dhrutam", anudhrutam:"anga-anudhrutam", chapu:"anga-chapu" };
 
+var VARIANT_FREQ = {
+  r1:277.18, r2:293.66, r3:311.13,
+  g1:293.66, g2:311.13, g3:329.63,
+  m1:349.23, m2:369.99,
+  d1:415.30, d2:440.00, d3:466.16,
+  n1:440.00, n2:466.16, n3:493.88
+};
+
 var SCALES = {
   mohanam:          { label:"Mohanam",          freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:493.88} },
   shankarabharanam: { label:"Shankarabharanam",  freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:493.88} },
   kalyani:          { label:"Kalyani",           freq:{s:261.63,r:293.66,g:329.63,m:369.99,p:392.00,d:440.00,n:493.88} },
   harikambhoji:     { label:"Harikambhoji",      freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:466.16} },
+  kambhoji:         { label:"Kambhoji",          freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:466.16} },
   kharaharapriya:   { label:"Kharaharapriya",    freq:{s:261.63,r:293.66,g:311.13,m:349.23,p:392.00,d:440.00,n:466.16} },
   natabhairavi:     { label:"Natabhairavi",      freq:{s:261.63,r:293.66,g:311.13,m:349.23,p:392.00,d:415.30,n:466.16} },
   todi:             { label:"Todi",              freq:{s:261.63,r:277.18,g:311.13,m:349.23,p:392.00,d:415.30,n:466.16} },
@@ -246,6 +259,7 @@ function parseBeat(raw){
   var tokens = [];
   var i = 0;
   var sawLetter = false;
+  var inDouble = false;
   while (i < raw.length){
     var ch = raw[i];
     if (ch === " "){ i++; continue; }
@@ -263,23 +277,27 @@ function parseBeat(raw){
       i++;
       continue;
     }
+    if (ch === "["){  inDouble = true;  i++; continue; }
+    if (ch === "]"){  inDouble = false; i++; continue; }
     if (!/[a-zA-Z]/.test(ch)){ i++; continue; }
     var isCap = ch === ch.toUpperCase() && ch.match(/[A-Z]/);
     var count = isCap ? 2 : 1;
     var letter = ch.toLowerCase();
+    var variant = null;
     sawLetter = true;
     i++;
+    if (i < raw.length && /[123]/.test(raw[i])){ variant = raw[i]; i++; }
     while (i < raw.length && (raw[i] === "," || raw[i] === ";")){
       count += (raw[i] === ",") ? 1 : 2;
       i++;
     }
-    tokens.push({ letter: letter, count: count, octave: 0 });
+    tokens.push({ letter: letter, count: count, octave: 0, variant: variant, doubleSpeed: inDouble });
   }
   return tokens;
 }
 
 function beatTotal(tokens){
-  return tokens.reduce(function(s,t){ return s + t.count; }, 0);
+  return tokens.reduce(function(s,t){ return s + (t.doubleSpeed ? t.count * 0.5 : t.count); }, 0);
 }
 
 function renderChips(bd){
@@ -299,8 +317,10 @@ function renderChips(bd){
     }
     var dispLetter = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
     var mark = tok.octave === 1 ? "\u0307" : (tok.octave === -1 ? "\u0323" : "");
-    chip.textContent = dispLetter + mark;
-    chip.title = "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
+    var sup = tok.variant ? ({"1":"\u00b9","2":"\u00b2","3":"\u00b3"}[tok.variant] || tok.variant) : "";
+    chip.textContent = dispLetter + mark + sup;
+    if (tok.doubleSpeed) chip.classList.add("chip-fast");
+    chip.title = (tok.doubleSpeed ? "2\u00d7 speed \u2014 " : "") + (tok.variant ? tok.letter.toUpperCase() + tok.variant + " variant \u2014 " : "") + "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
     chip.style.color = tok.octave === 1 ? "var(--text-accent)" : (tok.octave === -1 ? "var(--text-danger)" : "var(--text-primary)");
     chip.addEventListener("click", function(){
       tok.octave = tok.octave === 0 ? 1 : (tok.octave === 1 ? -1 : 0);
@@ -351,6 +371,12 @@ function buildLine(lineId, restoreBeats){
       countTag.className = "count-tag";
       countTag.textContent = "0/4";
 
+      var splitBtn = document.createElement("button");
+      splitBtn.type = "button";
+      splitBtn.className = "split-btn";
+      splitBtn.textContent = "[2×]";
+      splitBtn.title = "Wrap selected notes in [ ] for double speed";
+
       var beatData = { angaIdx: angaIdx, beatIdx: b, el: input, countEl: countTag, chipWrap: chipWrap, raw: "", tokens: [] };
       lineObj.beats.push(beatData);
 
@@ -369,6 +395,20 @@ function buildLine(lineId, restoreBeats){
           renderChips(beatData);
           updateBeatVisual(beatData);
         }
+        splitBtn.addEventListener("click", function(){
+          var start = input.selectionStart;
+          var end = input.selectionEnd;
+          var val = input.value;
+          if (start === end){
+            input.value = val.slice(0, start) + "[]" + val.slice(start);
+            input.setSelectionRange(start + 1, start + 1);
+          } else {
+            input.value = val.slice(0, start) + "[" + val.slice(start, end) + "]" + val.slice(end);
+            input.setSelectionRange(start, end + 2);
+          }
+          input.dispatchEvent(new Event("input"));
+          input.focus();
+        });
       })(beatData);
 
       input.addEventListener("input", function(ev){
@@ -389,6 +429,7 @@ function buildLine(lineId, restoreBeats){
       beatBox.appendChild(input);
       beatBox.appendChild(chipWrap);
       beatBox.appendChild(countTag);
+      beatBox.appendChild(splitBtn);
       beatsRow.appendChild(beatBox);
     }
 
@@ -432,7 +473,9 @@ function validateAnga(lineObj, angaIdx){
   var expected = anga.beats * MATRAS_PER_BEAT;
   var total = 0;
   lineObj.beats.forEach(function(bd){
-    if (bd.angaIdx === angaIdx) total += beatTotal(bd.tokens);
+    if (bd.angaIdx === angaIdx){
+      total += beatTotal(bd.tokens);
+    }
   });
   var line = lineObj.container.querySelector('[data-anga-count="' + angaIdx + '"]');
   if (line){
@@ -442,6 +485,7 @@ function validateAnga(lineObj, angaIdx){
     else line.style.color = "var(--text-muted)";
   }
 }
+
 
 function addLine(restoreBeats, afterId){
   lineCounter++;
@@ -616,10 +660,13 @@ function loadSaved(){
   }
 }
 
-function beatRawWithOctaves(bd){
-  if (bd.tokens.length === 0) return bd.raw || "....";
+function tokensToRaw(tokens){
   var out = "";
-  bd.tokens.forEach(function(tok){
+  var inFast = false;
+  tokens.forEach(function(tok){
+    var isFast = !!tok.doubleSpeed;
+    if (isFast && !inFast){ out += "["; inFast = true; }
+    if (!isFast && inFast){ out += "]"; inFast = false; }
     if (tok.carry){
       var remaining = tok.count;
       while (remaining >= 2){ out += ";"; remaining -= 2; }
@@ -628,13 +675,20 @@ function beatRawWithOctaves(bd){
     }
     var prefix = tok.octave === 1 ? "^" : (tok.octave === -1 ? "_" : "");
     var letter = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
+    if (tok.variant) letter += tok.variant;
     var ext = "";
     var extra = tok.count - (tok.count >= 2 ? 2 : 1);
     while (extra >= 2){ ext += ";"; extra -= 2; }
     while (extra >= 1){ ext += ","; extra -= 1; }
     out += prefix + letter + ext;
   });
+  if (inFast) out += "]";
   return out;
+}
+
+function beatRawWithOctaves(bd){
+  if (bd.tokens.length === 0) return bd.raw || "....";
+  return tokensToRaw(bd.tokens) || "....";
 }
 
 exportTxtBtn.addEventListener("click", async function(){
@@ -714,14 +768,15 @@ function parseLoadedText(text){
 
 function beatStringToRestoreEntry(s){
   if (s === "...." || s === "----") return { raw: "", octaves: [] };
-  var raw = s.replace(/[\^_]/g, function(m){ return m === "^" ? "" : ""; });
-  var tokens = [];
   var i = 0;
   var plain = "";
   var octaves = [];
   while (i < s.length){
     var ch = s[i];
-    if (ch === "^" || ch === "_"){
+    if (ch === "[" || ch === "]"){
+      plain += ch;
+      i++;
+    } else if (ch === "^" || ch === "_"){
       var oct = ch === "^" ? 1 : -1;
       i++;
       if (i < s.length){
@@ -734,6 +789,7 @@ function beatStringToRestoreEntry(s){
       plain += ch;
       octaves.push(0);
       i++;
+      if (i < s.length && /[123]/.test(s[i])){ plain += s[i]; i++; }
       while (i < s.length && (s[i] === "," || s[i] === ";")){ plain += s[i]; i++; }
     } else if (ch === "," || ch === ";"){
       plain += ch;
@@ -789,22 +845,45 @@ loadInput.addEventListener("change", function(){
 
 function formatBeatForPdf(bd){
   if (bd.tokens.length === 0) return "&nbsp;";
-  return bd.tokens.map(function(tok){
+  var parts = [];
+  var i = 0;
+  while (i < bd.tokens.length){
+    var tok = bd.tokens[i];
     if (tok.carry){
       var remaining = tok.count;
       var carryOut = "";
       while (remaining >= 2){ carryOut += ";"; remaining -= 2; }
       while (remaining >= 1){ carryOut += ","; remaining -= 1; }
-      return carryOut;
+      parts.push(carryOut);
+      i++;
+      continue;
     }
-    var l = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
-    var mark = tok.octave === 1 ? "\u0307" : (tok.octave === -1 ? "\u0323" : "");
-    var ext = "";
-    var extra = tok.count - (tok.count >= 2 ? 2 : 1);
-    while (extra >= 2){ ext += ";"; extra -= 2; }
-    while (extra >= 1){ ext += ","; extra -= 1; }
-    return l + mark + ext;
-  }).join(" ");
+    if (tok.doubleSpeed){
+      var group = "";
+      while (i < bd.tokens.length && bd.tokens[i].doubleSpeed && !bd.tokens[i].carry){
+        var t = bd.tokens[i];
+        var l = t.count >= 2 ? t.letter.toUpperCase() : t.letter;
+        var mark = t.octave === 1 ? "\u0307" : (t.octave === -1 ? "\u0323" : "");
+        var ext = "";
+        var extra = t.count - (t.count >= 2 ? 2 : 1);
+        while (extra >= 2){ ext += ";"; extra -= 2; }
+        while (extra >= 1){ ext += ","; extra -= 1; }
+        group += l + mark + ext;
+        i++;
+      }
+      parts.push('<span class="dbl">' + group + '</span>');
+    } else {
+      var l = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
+      var mark = tok.octave === 1 ? "\u0307" : (tok.octave === -1 ? "\u0323" : "");
+      var ext = "";
+      var extra = tok.count - (tok.count >= 2 ? 2 : 1);
+      while (extra >= 2){ ext += ";"; extra -= 2; }
+      while (extra >= 1){ ext += ","; extra -= 1; }
+      parts.push(l + mark + ext);
+      i++;
+    }
+  }
+  return parts.join(" ");
 }
 
 exportPdfBtn.addEventListener("click", function(){
@@ -830,16 +909,17 @@ exportPdfBtn.addEventListener("click", function(){
     '.avartanam{margin-bottom:2em;}' +
     '.line{font-size:16px;letter-spacing:0.3px;display:flex;align-items:center;white-space:nowrap;}' +
     '.anga{display:flex;flex-shrink:0;}' +
-    '.beat{display:inline-flex;align-items:center;justify-content:center;width:52px;flex-shrink:0;text-align:center;}' +
+    '.beat{display:inline-flex;align-items:center;justify-content:center;min-width:52px;flex-shrink:0;text-align:center;padding:0 2px;}' +
     '.bar{color:#993c1d;margin:0 6px;font-weight:600;flex-shrink:0;}' +
     '.footer{margin-top:32px;font-family:Helvetica,Arial,sans-serif;font-size:9px;color:#888780;font-style:italic;}' +
-    '@media print{body{padding:24px;} .line{font-size:14px;}}' +
+    '.dbl{text-decoration:underline;text-underline-offset:3px;}' +
+    '@media print{body{padding:24px;} .line{font-size:14px;} .dbl{text-decoration:underline!important;}}' +
     '</style></head><body>' +
     '<h1>Jatiswaram notation</h1>' +
     '<div class="sub">Tala: ' + tala.label + ' &nbsp;·&nbsp; Raga: ' + (SCALES[scaleSelect.value] || SCALES.mohanam).label + '</div>' +
     '<hr>' +
     rowsHtml +
-    '<div class="footer">Dot above a letter = upper octave. Dot below = lower octave. | divides angas, &#8214; marks the samam.</div>' +
+    '<div class="footer">Dot above = upper octave. Dot below = lower octave. Underline = double speed (2× kalam). | divides angas, &#8214; marks the samam.</div>' +
     '</body></html>';
 
   var w = window.open("", "_blank");
@@ -861,10 +941,11 @@ function flattenBeats(linesArray){
         return;
       }
       bd.tokens.forEach(function(tok){
+        var dur = tok.doubleSpeed ? tok.count * 0.5 : tok.count;
         if (tok.carry){
-          if (flat.length > 0) flat[flat.length - 1].count += tok.count;
+          if (flat.length > 0) flat[flat.length - 1].count += dur;
         } else {
-          flat.push({ letter: tok.letter, count: tok.count, octave: tok.octave, el: bd.el });
+          flat.push({ letter: tok.letter, count: dur, octave: tok.octave, variant: tok.variant, el: bd.el });
         }
       });
     });
@@ -884,7 +965,9 @@ function playFlat(flat, onDone){
   flat.forEach(function(note){
     var dur = note.count * matraDur;
     if (!note.letter){ t += dur; return; }
-    var base = (SCALES[scaleSelect.value] || SCALES.mohanam).freq[note.letter] || 261.63;
+    var base = (note.variant && VARIANT_FREQ[note.letter + note.variant])
+      ? VARIANT_FREQ[note.letter + note.variant]
+      : (SCALES[scaleSelect.value] || SCALES.mohanam).freq[note.letter] || 261.63;
     var freq = base;
     if (note.octave === 1) freq = base * 2;
     if (note.octave === -1) freq = base / 2;
