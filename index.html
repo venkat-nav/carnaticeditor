@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carnatic Notation Builder</title>
+<style>
+  :root {
+    --surface-0: #faf8f3;
+    --surface-1: #f1ede3;
+    --surface-2: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #5f5e5a;
+    --text-muted: #888780;
+    --text-accent: #185fa5;
+    --text-danger: #a32d2d;
+    --text-success: #3b6d11;
+    --border: #d8d4c8;
+    --border-strong: #b4b2a9;
+    --border-success: #639922;
+    --border-danger: #e24b4a;
+    --radius: 8px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-voice: Georgia, "Times New Roman", serif;
+
+    --c-teal-50:  #E1F5EE;
+    --c-coral-50: #FAECE7;
+    --c-amber-50: #FAEEDA;
+    --c-purple-50:#EEEDFE;
+    --c-gray-50:  #F1EFE8;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-0: #1c1b18;
+      --surface-1: #29281f;
+      --surface-2: #322f24;
+      --text-primary: #f1efe8;
+      --text-secondary: #b4b2a9;
+      --text-muted: #888780;
+      --text-accent: #85b7eb;
+      --text-danger: #f09595;
+      --text-success: #97c459;
+      --border: #444441;
+      --border-strong: #5f5e5a;
+      --border-success: #3b6d11;
+      --border-danger: #a32d2d;
+
+      --c-teal-50: #0c2620;
+      --c-coral-50:#2c150c;
+      --c-amber-50:#241a08;
+      --c-purple-50:#171530;
+      --c-gray-50: #232220;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 1.5rem; }
+
+  select, input[type=text], button {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    height: 36px;
+  }
+  input[type=range] { accent-color: var(--text-accent); }
+  button {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button:hover { background: var(--surface-1); }
+  button:active { transform: scale(0.98); }
+
+  .toolbar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 13px; color: var(--text-secondary); }
+  .save-status { font-size: 11px; color: var(--text-muted); margin-bottom: 0.75rem; min-height: 14px; }
+  .legend { font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem; }
+  code { background: var(--surface-1); padding: 1px 5px; border-radius: 4px; font-family: var(--font-voice); }
+
+  .avartana { margin-bottom: 1.25rem; border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem; background: var(--surface-1); }
+  .avartana-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+  .avartana-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+  .remove-line { font-size: 12px; height: 28px; padding: 4px 10px; }
+
+  .grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .anga-block { display: flex; flex-direction: column; gap: 6px; }
+  .anga-label { font-size: 11px; color: var(--text-muted); text-transform: lowercase; }
+  .beats-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .beat-box {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px; border-radius: var(--radius); border: 0.5px solid var(--border);
+  }
+  .beat-box input { width: 84px; height: 34px; padding: 0 6px; text-align: center; font-family: var(--font-voice); font-size: 15px; }
+  .chip-wrap { display: flex; gap: 3px; min-height: 20px; flex-wrap: wrap; justify-content: center; }
+  .chip {
+    min-width: 20px; height: 20px; padding: 0 4px; font-size: 12px; font-family: var(--font-voice);
+    border: 0.5px solid var(--border); border-radius: 4px; background: var(--surface-2);
+    cursor: pointer; line-height: 1;
+  }
+  .count-tag { font-size: 10px; color: var(--text-muted); }
+  .anga-total { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+
+  .anga-laghu      { background: var(--c-teal-50); }
+  .anga-dhrutam    { background: var(--c-coral-50); }
+  .anga-anudhrutam { background: var(--c-amber-50); }
+  .anga-chapu      { background: var(--c-purple-50); }
+
+  .add-line-row { margin-top: 1rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Carnatic notation builder</h1>
+  <p class="sub">Pick a tala, type each beat's swara group, click a note to set its octave, and check your counts as you go. Your work saves automatically in this browser.</p>
+
+  <div class="toolbar">
+    <div class="field">
+      <label for="talaSelect">Tala</label>
+      <select id="talaSelect"></select>
+    </div>
+    <div class="field">
+      <label for="tempo">Tempo</label>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="range" id="tempo" min="40" max="160" value="80" step="2" style="width:120px;"/>
+        <span id="tempoOut" style="font-size:13px; min-width:54px;">80 bpm</span>
+      </div>
+    </div>
+    <button id="playBtn"><span>&#9658;</span><span id="playLabel">Play all</span></button>
+    <button id="addLineBtn">+ Add avartanam</button>
+    <button id="clearBtn">Clear all</button>
+    <button id="exportTxtBtn">Export text</button>
+    <button id="exportPdfBtn">Export PDF</button>
+    <button id="loadFileBtn">Load text file</button>
+  </div>
+
+  <div class="save-status" id="saveStatus"></div>
+
+  <div class="legend">
+    Each beat = 4 counts. Type the group per beat, e.g. <code>S,d</code> or <code>pgrd</code>.
+    Lowercase = 1 count, capital = 2 counts, <code>,</code> = +1, <code>;</code> = +2.
+    A leading <code>,</code> or <code>;</code> carries the previous beat's note forward.
+    Click a note chip below the box to cycle its octave (middle &rarr; upper dot &rarr; lower dot).
+  </div>
+
+  <div id="linesWrap"></div>
+
+  <div class="add-line-row">
+    <button id="addLineBtn2">+ Add avartanam</button>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script>
+(function(){
+
+var MATRAS_PER_BEAT = 4;
+var STORAGE_KEY = "carnatic-notation-state-v1";
+
+var TALAS = {
+  adi: { label: "Adi (4+2+2)", angas: [{type:"laghu", beats:4}, {type:"dhrutam", beats:2}, {type:"dhrutam", beats:2}] },
+  rupaka: { label: "Rupaka (2+4)", angas: [{type:"dhrutam", beats:2}, {type:"laghu", beats:4}] },
+  misrachapu: { label: "Misra Chapu (3+4)", angas: [{type:"chapu", beats:3}, {type:"chapu", beats:4}] },
+  khandachapu: { label: "Khanda Chapu (2+3)", angas: [{type:"chapu", beats:2}, {type:"chapu", beats:3}] },
+  triputa: { label: "Triputa (3+2+2)", angas: [{type:"laghu", beats:3}, {type:"dhrutam", beats:2}, {type:"dhrutam", beats:2}] },
+  jhampa: { label: "Jhampa (7+1+2)", angas: [{type:"laghu", beats:7}, {type:"anudhrutam", beats:1}, {type:"dhrutam", beats:2}] },
+  ata: { label: "Ata (5+5+2+2)", angas: [{type:"laghu", beats:5}, {type:"laghu", beats:5}, {type:"dhrutam", beats:2}, {type:"dhrutam", beats:2}] }
+};
+
+var ANGA_CLASS = { laghu:"anga-laghu", dhrutam:"anga-dhrutam", anudhrutam:"anga-anudhrutam", chapu:"anga-chapu" };
+
+var talaSelect = document.getElementById("talaSelect");
+Object.keys(TALAS).forEach(function(key){
+  var opt = document.createElement("option");
+  opt.value = key;
+  opt.textContent = TALAS[key].label;
+  talaSelect.appendChild(opt);
+});
+
+var tempoSlider = document.getElementById("tempo");
+var tempoOut = document.getElementById("tempoOut");
+var linesWrap = document.getElementById("linesWrap");
+var playBtn = document.getElementById("playBtn");
+var playLabel = document.getElementById("playLabel");
+var clearBtn = document.getElementById("clearBtn");
+var addLineBtn = document.getElementById("addLineBtn");
+var addLineBtn2 = document.getElementById("addLineBtn2");
+var exportTxtBtn = document.getElementById("exportTxtBtn");
+var exportPdfBtn = document.getElementById("exportPdfBtn");
+var loadFileBtn = document.getElementById("loadFileBtn");
+var saveStatus = document.getElementById("saveStatus");
+
+tempoSlider.addEventListener("input", function(){
+  tempoOut.textContent = tempoSlider.value + " bpm";
+  scheduleSave();
+});
+
+var lines = [];
+var lineCounter = 0;
+var saveTimer = null;
+
+function parseBeat(raw){
+  var tokens = [];
+  var i = 0;
+  var sawLetter = false;
+  while (i < raw.length){
+    var ch = raw[i];
+    if (ch === " "){ i++; continue; }
+    if (ch === "," || ch === ";"){
+      if (!sawLetter){
+        var carryCount = (ch === ",") ? 1 : 2;
+        i++;
+        while (i < raw.length && (raw[i] === "," || raw[i] === ";")){
+          carryCount += (raw[i] === ",") ? 1 : 2;
+          i++;
+        }
+        tokens.push({ letter: "\u2014", count: carryCount, octave: 0, carry: true });
+        continue;
+      }
+      i++;
+      continue;
+    }
+    if (!/[a-zA-Z]/.test(ch)){ i++; continue; }
+    var isCap = ch === ch.toUpperCase() && ch.match(/[A-Z]/);
+    var count = isCap ? 2 : 1;
+    var letter = ch.toLowerCase();
+    sawLetter = true;
+    i++;
+    while (i < raw.length && (raw[i] === "," || raw[i] === ";")){
+      count += (raw[i] === ",") ? 1 : 2;
+      i++;
+    }
+    tokens.push({ letter: letter, count: count, octave: 0 });
+  }
+  return tokens;
+}
+
+function beatTotal(tokens){
+  return tokens.reduce(function(s,t){ return s + t.count; }, 0);
+}
+
+function renderChips(bd){
+  bd.chipWrap.innerHTML = "";
+  bd.tokens.forEach(function(tok){
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    if (tok.carry){
+      chip.textContent = "\u2014" + tok.count;
+      chip.title = "continues the previous beat's note for " + tok.count + " more count" + (tok.count > 1 ? "s" : "");
+      chip.style.color = "var(--text-muted)";
+      chip.style.fontStyle = "italic";
+      chip.style.cursor = "default";
+      bd.chipWrap.appendChild(chip);
+      return;
+    }
+    var dispLetter = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
+    var mark = tok.octave === 1 ? "\u0307" : (tok.octave === -1 ? "\u0323" : "");
+    chip.textContent = dispLetter + mark;
+    chip.title = "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
+    chip.style.color = tok.octave === 1 ? "var(--text-accent)" : (tok.octave === -1 ? "var(--text-danger)" : "var(--text-primary)");
+    chip.addEventListener("click", function(){
+      tok.octave = tok.octave === 0 ? 1 : (tok.octave === 1 ? -1 : 0);
+      renderChips(bd);
+      scheduleSave();
+    });
+    bd.chipWrap.appendChild(chip);
+  });
+}
+
+function buildLine(lineId, restoreBeats){
+  var lineObj = lines.find(function(l){ return l.id === lineId; });
+  var talaKey = talaSelect.value;
+  var tala = TALAS[talaKey];
+
+  var oldGrid = lineObj.container.querySelector(".grid");
+  if (oldGrid) oldGrid.remove();
+  lineObj.beats = [];
+
+  var grid = document.createElement("div");
+  grid.className = "grid";
+
+  tala.angas.forEach(function(anga, angaIdx){
+    var angaBlock = document.createElement("div");
+    angaBlock.className = "anga-block";
+
+    var label = document.createElement("div");
+    label.className = "anga-label";
+    var totalMatras = anga.beats * MATRAS_PER_BEAT;
+    label.textContent = anga.type + " \u00b7 " + anga.beats + " beats \u00b7 " + totalMatras + " counts";
+    angaBlock.appendChild(label);
+
+    var beatsRow = document.createElement("div");
+    beatsRow.className = "beats-row";
+
+    for (var b = 0; b < anga.beats; b++){
+      var beatBox = document.createElement("div");
+      beatBox.className = "beat-box " + (ANGA_CLASS[anga.type] || "");
+
+      var input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "e.g. pgrd";
+
+      var chipWrap = document.createElement("div");
+      chipWrap.className = "chip-wrap";
+
+      var countTag = document.createElement("div");
+      countTag.className = "count-tag";
+      countTag.textContent = "0/4";
+
+      var beatData = { angaIdx: angaIdx, beatIdx: b, el: input, countEl: countTag, chipWrap: chipWrap, raw: "", tokens: [] };
+      lineObj.beats.push(beatData);
+
+      (function(beatData){
+        var cursorIdx = lineObj.beats.length - 1;
+        if (restoreBeats && restoreBeats[cursorIdx]){
+          beatData.raw = restoreBeats[cursorIdx].raw || "";
+          input.value = beatData.raw;
+          beatData.tokens = parseBeat(beatData.raw);
+          if (restoreBeats[cursorIdx].octaves){
+            var nonCarry = beatData.tokens.filter(function(t){return !t.carry;});
+            nonCarry.forEach(function(tok, ti){
+              if (restoreBeats[cursorIdx].octaves[ti] !== undefined) tok.octave = restoreBeats[cursorIdx].octaves[ti];
+            });
+          }
+          renderChips(beatData);
+          updateBeatVisual(beatData);
+        }
+      })(beatData);
+
+      input.addEventListener("input", function(ev){
+        var bd = lineObj.beats.find(function(x){ return x.el === ev.target; });
+        bd.raw = ev.target.value;
+        var oldTokens = bd.tokens;
+        var newTokens = parseBeat(bd.raw);
+        newTokens.forEach(function(nt, idx){
+          if (oldTokens[idx] && oldTokens[idx].letter === nt.letter) nt.octave = oldTokens[idx].octave;
+        });
+        bd.tokens = newTokens;
+        renderChips(bd);
+        updateBeatVisual(bd);
+        validateAnga(lineObj, angaIdx);
+        scheduleSave();
+      });
+
+      beatBox.appendChild(input);
+      beatBox.appendChild(chipWrap);
+      beatBox.appendChild(countTag);
+      beatsRow.appendChild(beatBox);
+    }
+
+    angaBlock.appendChild(beatsRow);
+
+    var angaTotalLine = document.createElement("div");
+    angaTotalLine.className = "anga-total";
+    angaTotalLine.dataset.angaCount = angaIdx;
+    angaTotalLine.textContent = "anga total: 0 / " + totalMatras;
+    angaBlock.appendChild(angaTotalLine);
+
+    grid.appendChild(angaBlock);
+  });
+
+  lineObj.container.appendChild(grid);
+
+  if (restoreBeats){
+    tala.angas.forEach(function(a, idx){ validateAnga(lineObj, idx); });
+  }
+}
+
+function updateBeatVisual(bd){
+  var total = beatTotal(bd.tokens);
+  bd.countEl.textContent = total + "/" + MATRAS_PER_BEAT;
+  if (total === MATRAS_PER_BEAT){
+    bd.countEl.style.color = "var(--text-success)";
+    bd.el.style.borderColor = "var(--border-success)";
+  } else if (total > MATRAS_PER_BEAT){
+    bd.countEl.style.color = "var(--text-danger)";
+    bd.el.style.borderColor = "var(--border-danger)";
+  } else {
+    bd.countEl.style.color = "var(--text-muted)";
+    bd.el.style.borderColor = "";
+  }
+}
+
+function validateAnga(lineObj, angaIdx){
+  var talaKey = talaSelect.value;
+  var tala = TALAS[talaKey];
+  var anga = tala.angas[angaIdx];
+  var expected = anga.beats * MATRAS_PER_BEAT;
+  var total = 0;
+  lineObj.beats.forEach(function(bd){
+    if (bd.angaIdx === angaIdx) total += beatTotal(bd.tokens);
+  });
+  var line = lineObj.container.querySelector('[data-anga-count="' + angaIdx + '"]');
+  if (line){
+    line.textContent = "anga total: " + total + " / " + expected;
+    if (total === expected) line.style.color = "var(--text-success)";
+    else if (total > expected) line.style.color = "var(--text-danger)";
+    else line.style.color = "var(--text-muted)";
+  }
+}
+
+function addLine(restoreBeats){
+  lineCounter++;
+  var id = lineCounter;
+  var container = document.createElement("div");
+  container.className = "avartana";
+
+  var head = document.createElement("div");
+  head.className = "avartana-head";
+  var title = document.createElement("div");
+  title.className = "avartana-title";
+  title.textContent = "Avartanam " + id;
+  var removeBtn = document.createElement("button");
+  removeBtn.className = "remove-line";
+  removeBtn.textContent = "Remove";
+  removeBtn.addEventListener("click", function(){
+    container.remove();
+    lines = lines.filter(function(l){ return l.id !== id; });
+    renumber();
+    scheduleSave();
+  });
+  head.appendChild(title);
+  head.appendChild(removeBtn);
+  container.appendChild(head);
+
+  linesWrap.appendChild(container);
+
+  var lineObj = { id: id, container: container, titleEl: title, beats: [] };
+  lines.push(lineObj);
+  buildLine(id, restoreBeats);
+}
+
+function renumber(){
+  lines.forEach(function(l, idx){
+    l.titleEl.textContent = "Avartanam " + (idx + 1);
+  });
+}
+
+function rebuildAllLines(){
+  lines.forEach(function(l){ buildLine(l.id); });
+  scheduleSave();
+}
+
+talaSelect.addEventListener("change", rebuildAllLines);
+addLineBtn.addEventListener("click", function(){ addLine(); scheduleSave(); });
+addLineBtn2.addEventListener("click", function(){ addLine(); scheduleSave(); });
+
+clearBtn.addEventListener("click", function(){
+  lines.forEach(function(l){ l.container.remove(); });
+  lines = [];
+  lineCounter = 0;
+  addLine();
+  scheduleSave();
+});
+
+function serializeState(){
+  return {
+    tala: talaSelect.value,
+    tempo: tempoSlider.value,
+    lines: lines.map(function(lineObj){
+      return lineObj.beats.map(function(bd){
+        return { raw: bd.raw, octaves: bd.tokens.filter(function(t){return !t.carry;}).map(function(t){ return t.octave; }) };
+      });
+    })
+  };
+}
+
+function scheduleSave(){
+  if (saveTimer) clearTimeout(saveTimer);
+  saveStatus.textContent = "Saving\u2026";
+  saveTimer = setTimeout(doSave, 400);
+}
+
+function doSave(){
+  try {
+    var data = serializeState();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    saveStatus.textContent = "Saved";
+    setTimeout(function(){ if (saveStatus.textContent === "Saved") saveStatus.textContent = ""; }, 1200);
+  } catch (e){
+    saveStatus.textContent = "Could not save (browser storage unavailable)";
+  }
+}
+
+function loadSaved(){
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e){
+    return null;
+  }
+}
+
+function beatRawWithOctaves(bd){
+  if (bd.tokens.length === 0) return bd.raw || "....";
+  var out = "";
+  bd.tokens.forEach(function(tok){
+    if (tok.carry){
+      var remaining = tok.count;
+      while (remaining >= 2){ out += ";"; remaining -= 2; }
+      while (remaining >= 1){ out += ","; remaining -= 1; }
+      return;
+    }
+    var prefix = tok.octave === 1 ? "^" : (tok.octave === -1 ? "_" : "");
+    var letter = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
+    var ext = "";
+    var extra = tok.count - (tok.count >= 2 ? 2 : 1);
+    while (extra >= 2){ ext += ";"; extra -= 2; }
+    while (extra >= 1){ ext += ","; extra -= 1; }
+    out += prefix + letter + ext;
+  });
+  return out;
+}
+
+exportTxtBtn.addEventListener("click", function(){
+  var out = [];
+  out.push("TALA:" + talaSelect.value);
+  out.push("TEMPO:" + tempoSlider.value);
+  lines.forEach(function(lineObj, li){
+    var parts = [];
+    var tala = TALAS[talaSelect.value];
+    var idx = 0;
+    tala.angas.forEach(function(anga){
+      var angaBeats = [];
+      for (var b = 0; b < anga.beats; b++){
+        angaBeats.push(beatRawWithOctaves(lineObj.beats[idx]));
+        idx++;
+      }
+      parts.push(angaBeats.join(" "));
+    });
+    out.push("Avartanam " + (li+1) + ":  || " + parts.join(" | ") + " ||");
+  });
+  var text = out.join("\n");
+  var blob = new Blob([text], {type: "text/plain"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "notation.txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+function parseLoadedText(text){
+  var lines2 = text.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+  var talaKey = "adi";
+  var tempo = "80";
+  var avartanams = [];
+  lines2.forEach(function(line){
+    if (line.indexOf("TALA:") === 0){ talaKey = line.slice(5).trim(); return; }
+    if (line.indexOf("TEMPO:") === 0){ tempo = line.slice(6).trim(); return; }
+    var m = line.match(/Avartanam\s+\d+:\s*\|\|(.*)\|\|/);
+    if (!m) return;
+    var body = m[1].trim();
+    var angaParts = body.split("|").map(function(s){ return s.trim(); });
+    var beatStrings = [];
+    angaParts.forEach(function(part){
+      var beats = part.split(/\s+/).filter(Boolean);
+      beatStrings = beatStrings.concat(beats);
+    });
+    avartanams.push(beatStrings);
+  });
+  return { tala: talaKey, tempo: tempo, avartanams: avartanams };
+}
+
+function beatStringToRestoreEntry(s){
+  if (s === "...." || s === "----") return { raw: "", octaves: [] };
+  var raw = s.replace(/[\^_]/g, function(m){ return m === "^" ? "" : ""; });
+  var tokens = [];
+  var i = 0;
+  var plain = "";
+  var octaves = [];
+  while (i < s.length){
+    var ch = s[i];
+    if (ch === "^" || ch === "_"){
+      var oct = ch === "^" ? 1 : -1;
+      i++;
+      if (i < s.length){
+        plain += s[i];
+        octaves.push(oct);
+        i++;
+        while (i < s.length && (s[i] === "," || s[i] === ";")){ plain += s[i]; i++; }
+      }
+    } else if (/[a-zA-Z]/.test(ch)){
+      plain += ch;
+      octaves.push(0);
+      i++;
+      while (i < s.length && (s[i] === "," || s[i] === ";")){ plain += s[i]; i++; }
+    } else if (ch === "," || ch === ";"){
+      plain += ch;
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return { raw: plain, octaves: octaves };
+}
+
+var loadInput = document.createElement("input");
+loadInput.type = "file";
+loadInput.accept = ".txt,text/plain";
+loadInput.style.display = "none";
+document.body.appendChild(loadInput);
+
+loadFileBtn.addEventListener("click", function(){
+  loadInput.value = "";
+  loadInput.click();
+});
+
+loadInput.addEventListener("change", function(){
+  var file = loadInput.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      var parsed = parseLoadedText(e.target.result);
+      if (!parsed.avartanams.length){
+        saveStatus.textContent = "Could not find any avartanams in that file";
+        return;
+      }
+      lines.forEach(function(l){ l.container.remove(); });
+      lines = [];
+      lineCounter = 0;
+      talaSelect.value = TALAS[parsed.tala] ? parsed.tala : "adi";
+      tempoSlider.value = parsed.tempo;
+      tempoOut.textContent = parsed.tempo + " bpm";
+      parsed.avartanams.forEach(function(beatStrings){
+        var restoreBeats = beatStrings.map(beatStringToRestoreEntry);
+        addLine(restoreBeats);
+      });
+      scheduleSave();
+      saveStatus.textContent = "Loaded " + parsed.avartanams.length + " avartanam" + (parsed.avartanams.length > 1 ? "s" : "");
+    } catch (err){
+      saveStatus.textContent = "Could not read that file";
+    }
+  };
+  reader.readAsText(file);
+});
+
+function formatBeatForPdf(bd){
+  if (bd.tokens.length === 0) return "&nbsp;";
+  return bd.tokens.map(function(tok){
+    if (tok.carry){
+      var remaining = tok.count;
+      var carryOut = "";
+      while (remaining >= 2){ carryOut += ";"; remaining -= 2; }
+      while (remaining >= 1){ carryOut += ","; remaining -= 1; }
+      return carryOut;
+    }
+    var l = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
+    var mark = tok.octave === 1 ? "\u0307" : (tok.octave === -1 ? "\u0323" : "");
+    var ext = "";
+    var extra = tok.count - (tok.count >= 2 ? 2 : 1);
+    while (extra >= 2){ ext += ";"; extra -= 2; }
+    while (extra >= 1){ ext += ","; extra -= 1; }
+    return l + mark + ext;
+  }).join(" ");
+}
+
+exportPdfBtn.addEventListener("click", function(){
+  var tala = TALAS[talaSelect.value];
+  var rowsHtml = lines.map(function(lineObj, li){
+    var idx = 0;
+    var angaHtml = tala.angas.map(function(anga){
+      var beatsHtml = [];
+      for (var b = 0; b < anga.beats; b++){
+        beatsHtml.push('<span class="beat">' + formatBeatForPdf(lineObj.beats[idx]) + '</span>');
+        idx++;
+      }
+      return '<span class="anga">' + beatsHtml.join('') + '</span>';
+    }).join('<span class="bar">|</span>');
+    return '<div class="avartanam"><div class="avnum">Avartanam ' + (li+1) + '</div>' +
+      '<div class="line"><span class="bar">&#8214;</span>' + angaHtml + '<span class="bar">&#8214;</span></div></div>';
+  }).join("");
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Jatiswaram notation</title><style>' +
+    'body{font-family:Georgia,"Times New Roman",serif;color:#1a1a1a;margin:0;padding:48px;}' +
+    'h1{font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;margin:0 0 4px;}' +
+    '.sub{font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#993c1d;margin:0 0 20px;font-style:italic;}' +
+    'hr{border:none;border-top:1.5px solid #993c1d;margin:0 0 28px;}' +
+    '.avartanam{margin-bottom:18px;}' +
+    '.avnum{font-family:Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;color:#993c1d;margin-bottom:6px;}' +
+    '.line{font-size:16px;letter-spacing:0.3px;display:flex;align-items:center;white-space:nowrap;}' +
+    '.anga{display:flex;flex-shrink:0;}' +
+    '.beat{display:inline-flex;align-items:center;justify-content:center;width:52px;flex-shrink:0;text-align:center;}' +
+    '.bar{color:#993c1d;margin:0 6px;font-weight:600;flex-shrink:0;}' +
+    '.footer{margin-top:32px;font-family:Helvetica,Arial,sans-serif;font-size:9px;color:#888780;font-style:italic;}' +
+    '@media print{body{padding:24px;} .line{font-size:14px;}}' +
+    '</style></head><body>' +
+    '<h1>Jatiswaram notation</h1>' +
+    '<div class="sub">Tala: ' + tala.label + '</div>' +
+    '<hr>' +
+    rowsHtml +
+    '<div class="footer">Dot above a letter = upper octave. Dot below = lower octave. | divides angas, &#8214; marks the samam.</div>' +
+    '</body></html>';
+
+  var w = window.open("", "_blank");
+  if (!w){ saveStatus.textContent = "Pop-up blocked \u2014 allow pop-ups to export PDF"; return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){ w.print(); }, 300);
+});
+
+var NOTE_FREQ = { s:261.63, r:293.66, g:329.63, m:349.23, p:392.00, d:440.00, n:493.88 };
+
+var isPlaying = false;
+playBtn.addEventListener("click", function(){
+  if (isPlaying) return;
+  if (typeof Tone === "undefined") return;
+  Tone.start();
+  isPlaying = true;
+  playLabel.textContent = "Playing";
+  var synth = new Tone.Synth().toDestination();
+  var bpm = parseInt(tempoSlider.value, 10);
+  var matraDur = 60 / bpm;
+
+  var flat = [];
+  lines.forEach(function(lineObj){
+    lineObj.beats.forEach(function(bd){
+      if (bd.tokens.length === 0){
+        flat.push({ letter: null, count: MATRAS_PER_BEAT, octave: 0, el: bd.el });
+        return;
+      }
+      bd.tokens.forEach(function(tok){
+        if (tok.carry){
+          if (flat.length > 0) flat[flat.length - 1].count += tok.count;
+        } else {
+          flat.push({ letter: tok.letter, count: tok.count, octave: tok.octave, el: bd.el });
+        }
+      });
+    });
+  });
+
+  var t = 0;
+  flat.forEach(function(note){
+    var dur = note.count * matraDur;
+    if (!note.letter){ t += dur; return; }
+    var base = NOTE_FREQ[note.letter] || 261.63;
+    var freq = base;
+    if (note.octave === 1) freq = base * 2;
+    if (note.octave === -1) freq = base / 2;
+    (function(freq, time, dur, el){
+      Tone.Transport.scheduleOnce(function(){
+        synth.triggerAttackRelease(freq, dur * 0.85);
+        var origBg = el.style.background;
+        el.style.background = "#cfe6fb";
+        setTimeout(function(){ el.style.background = origBg; }, dur * 900);
+      }, time);
+    })(freq, t, dur, note.el);
+    t += dur;
+  });
+
+  Tone.Transport.bpm.value = 120;
+  Tone.Transport.start("+0.05");
+  setTimeout(function(){
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+    isPlaying = false;
+    playLabel.textContent = "Play all";
+  }, (t + 0.3) * 1000);
+});
+
+(function init(){
+  talaSelect.value = "adi";
+  var saved = loadSaved();
+  if (saved && saved.lines && saved.lines.length){
+    talaSelect.value = saved.tala || "adi";
+    if (saved.tempo){ tempoSlider.value = saved.tempo; tempoOut.textContent = saved.tempo + " bpm"; }
+    saved.lines.forEach(function(beatsForLine){
+      addLine(beatsForLine);
+    });
+  } else {
+    addLine();
+  }
+})();
+
+})();
+</script>
+</body>
+</html>
