@@ -178,6 +178,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 (function(){
 
@@ -886,48 +887,134 @@ function formatBeatForPdf(bd){
   return parts.join(" ");
 }
 
-exportPdfBtn.addEventListener("click", function(){
-  var tala = TALAS[talaSelect.value];
-  var rowsHtml = lines.map(function(lineObj, li){
-    var idx = 0;
-    var angaHtml = tala.angas.map(function(anga){
-      var beatsHtml = [];
-      for (var b = 0; b < anga.beats; b++){
-        beatsHtml.push('<span class="beat">' + formatBeatForPdf(lineObj.beats[idx]) + '</span>');
-        idx++;
+function tokenToStr(tok){
+  var l = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
+  var mark = tok.octave === 1 ? "̇" : (tok.octave === -1 ? "̣" : "");
+  var ext = "", extra = tok.count - (tok.count >= 2 ? 2 : 1);
+  while (extra >= 2){ ext += ";"; extra -= 2; }
+  while (extra >= 1){ ext += ","; extra -= 1; }
+  return l + mark + ext;
+}
+
+function drawPdfBeat(doc, bd, x, y, beatW){
+  if (bd.tokens.length === 0) return;
+  var parts = [];
+  var i = 0;
+  while (i < bd.tokens.length){
+    var tok = bd.tokens[i];
+    if (tok.carry){
+      var rem = tok.count, s = "";
+      while (rem >= 2){ s += ";"; rem -= 2; }
+      while (rem >= 1){ s += ","; rem -= 1; }
+      parts.push({ text: s, underline: false });
+      i++; continue;
+    }
+    if (tok.doubleSpeed){
+      var group = "";
+      while (i < bd.tokens.length && bd.tokens[i].doubleSpeed && !bd.tokens[i].carry){
+        group += tokenToStr(bd.tokens[i]); i++;
       }
-      return '<span class="anga">' + beatsHtml.join('') + '</span>';
-    }).join('<span class="bar">|</span>');
-    return '<div class="avartanam"><div class="line"><span class="bar">&#8214;</span>' + angaHtml + '<span class="bar">&#8214;</span></div></div>';
-  }).join("");
+      parts.push({ text: group, underline: true });
+    } else {
+      parts.push({ text: tokenToStr(tok), underline: false });
+      i++;
+    }
+  }
+  var totalW = parts.reduce(function(s, p){ return s + doc.getTextWidth(p.text); }, 0);
+  var cx = x + (beatW - totalW) / 2;
+  parts.forEach(function(p){
+    var tw = doc.getTextWidth(p.text);
+    doc.text(p.text, cx, y);
+    if (p.underline){
+      doc.setDrawColor(26, 26, 26);
+      doc.setLineWidth(0.25);
+      doc.line(cx, y + 0.8, cx + tw, y + 0.8);
+      doc.setDrawColor(0);
+    }
+    cx += tw;
+  });
+}
 
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Jatiswaram notation</title><style>' +
-    'body{font-family:Georgia,"Times New Roman",serif;color:#1a1a1a;margin:0;padding:48px;}' +
-    'h1{font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;margin:0 0 4px;}' +
-    '.sub{font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#993c1d;margin:0 0 20px;font-style:italic;}' +
-    'hr{border:none;border-top:1.5px solid #993c1d;margin:0 0 28px;}' +
-    '.avartanam{margin-bottom:2em;}' +
-    '.line{font-size:16px;letter-spacing:0.3px;display:flex;align-items:center;white-space:nowrap;}' +
-    '.anga{display:flex;flex-shrink:0;}' +
-    '.beat{display:inline-flex;align-items:center;justify-content:center;min-width:52px;flex-shrink:0;text-align:center;padding:0 2px;}' +
-    '.bar{color:#993c1d;margin:0 6px;font-weight:600;flex-shrink:0;}' +
-    '.footer{margin-top:32px;font-family:Helvetica,Arial,sans-serif;font-size:9px;color:#888780;font-style:italic;}' +
-    '.dbl{text-decoration:underline;text-underline-offset:3px;}' +
-    '@media print{body{padding:24px;} .line{font-size:14px;} .dbl{text-decoration:underline!important;}}' +
-    '</style></head><body>' +
-    '<h1>Jatiswaram notation</h1>' +
-    '<div class="sub">Tala: ' + tala.label + ' &nbsp;·&nbsp; Raga: ' + (SCALES[scaleSelect.value] || SCALES.mohanam).label + '</div>' +
-    '<hr>' +
-    rowsHtml +
-    '<div class="footer">Dot above = upper octave. Dot below = lower octave. Underline = double speed (2× kalam). | divides angas, &#8214; marks the samam.</div>' +
-    '</body></html>';
+exportPdfBtn.addEventListener("click", function(){
+  if (typeof jspdf === "undefined"){ saveStatus.textContent = "jsPDF not loaded — check internet connection"; return; }
+  var talaKey = talaSelect.value;
+  var tala = TALAS[talaKey];
+  var scaleName = (SCALES[scaleSelect.value] || SCALES.mohanam).label;
 
-  var w = window.open("", "_blank");
-  if (!w){ saveStatus.textContent = "Pop-up blocked \u2014 allow pop-ups to export PDF"; return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  setTimeout(function(){ w.print(); }, 300);
+  var doc = new jspdf.jsPDF({ unit: "mm", format: "a4" });
+  var PW = 210, PH = 297, ML = 15, MR = 15;
+  var usable = PW - ML - MR;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(26, 26, 26);
+  doc.text("Jatiswaram notation", ML, 22);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(153, 60, 29);
+  doc.text("Tala: " + tala.label + "   ·   Raga: " + scaleName, ML, 30);
+
+  doc.setDrawColor(153, 60, 29);
+  doc.setLineWidth(0.5);
+  doc.line(ML, 34, PW - MR, 34);
+
+  var totalBeats = tala.angas.reduce(function(s, a){ return s + a.beats; }, 0);
+  var numAngaSeps = tala.angas.length - 1;
+
+  doc.setFont("times", "normal");
+  doc.setFontSize(13);
+  var dblBarW = doc.getTextWidth("‖") + 2;
+  var barW    = doc.getTextWidth("|") + 2;
+  var totalBarW = 2 * dblBarW + numAngaSeps * barW;
+  var beatW = (usable - totalBarW) / totalBeats;
+
+  var lineH = 11;
+  var y = 44;
+
+  lines.forEach(function(lineObj){
+    if (y + lineH > PH - 18){ doc.addPage(); y = 20; }
+    doc.setFont("times", "normal");
+    doc.setFontSize(13);
+    doc.setTextColor(26, 26, 26);
+
+    var x = ML;
+    doc.setTextColor(153, 60, 29);
+    doc.setFont("times", "bold");
+    doc.text("‖", x, y);
+    x += dblBarW;
+
+    var beatIdx = 0;
+    tala.angas.forEach(function(anga, angaIdx){
+      doc.setFont("times", "normal");
+      doc.setTextColor(26, 26, 26);
+      for (var b = 0; b < anga.beats; b++){
+        drawPdfBeat(doc, lineObj.beats[beatIdx++], x, y, beatW);
+        x += beatW;
+      }
+      if (angaIdx < tala.angas.length - 1){
+        doc.setTextColor(153, 60, 29);
+        doc.setFont("times", "bold");
+        doc.text("|", x, y);
+        x += barW;
+      }
+    });
+
+    doc.setTextColor(153, 60, 29);
+    doc.setFont("times", "bold");
+    doc.text("‖", x, y);
+    doc.setTextColor(0);
+    y += lineH;
+  });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(136, 135, 128);
+  doc.text("Dot above = upper octave · Dot below = lower octave · Underline = double speed (2×) · | divides angas · ‖ marks samam", ML, PH - 10);
+
+  var name = window.prompt("Save PDF as:", "notation");
+  if (name === null) return;
+  doc.save((name.trim() || "notation") + ".pdf");
 });
 
 var isPlaying = false;
