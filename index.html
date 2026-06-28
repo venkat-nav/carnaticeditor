@@ -138,6 +138,10 @@
       <select id="talaSelect"></select>
     </div>
     <div class="field">
+      <label for="scaleSelect">Raga</label>
+      <select id="scaleSelect"></select>
+    </div>
+    <div class="field">
       <label for="tempo">Tempo</label>
       <div style="display:flex; align-items:center; gap:8px;">
         <input type="range" id="tempo" min="40" max="160" value="80" step="2" style="width:120px;"/>
@@ -188,12 +192,32 @@ var TALAS = {
 
 var ANGA_CLASS = { laghu:"anga-laghu", dhrutam:"anga-dhrutam", anudhrutam:"anga-anudhrutam", chapu:"anga-chapu" };
 
+var SCALES = {
+  mohanam:          { label:"Mohanam",          freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:493.88} },
+  shankarabharanam: { label:"Shankarabharanam",  freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:493.88} },
+  kalyani:          { label:"Kalyani",           freq:{s:261.63,r:293.66,g:329.63,m:369.99,p:392.00,d:440.00,n:493.88} },
+  harikambhoji:     { label:"Harikambhoji",      freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:440.00,n:466.16} },
+  kharaharapriya:   { label:"Kharaharapriya",    freq:{s:261.63,r:293.66,g:311.13,m:349.23,p:392.00,d:440.00,n:466.16} },
+  natabhairavi:     { label:"Natabhairavi",      freq:{s:261.63,r:293.66,g:311.13,m:349.23,p:392.00,d:415.30,n:466.16} },
+  todi:             { label:"Todi",              freq:{s:261.63,r:277.18,g:311.13,m:349.23,p:392.00,d:415.30,n:466.16} },
+  charukeshi:       { label:"Charukeshi",        freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:415.30,n:466.16} },
+  mayamalavagowla:  { label:"Mayamalavagowla",   freq:{s:261.63,r:277.18,g:329.63,m:349.23,p:392.00,d:415.30,n:493.88} },
+};
+
 var talaSelect = document.getElementById("talaSelect");
 Object.keys(TALAS).forEach(function(key){
   var opt = document.createElement("option");
   opt.value = key;
   opt.textContent = TALAS[key].label;
   talaSelect.appendChild(opt);
+});
+
+var scaleSelect = document.getElementById("scaleSelect");
+Object.keys(SCALES).forEach(function(key){
+  var opt = document.createElement("option");
+  opt.value = key;
+  opt.textContent = SCALES[key].label;
+  scaleSelect.appendChild(opt);
 });
 
 var tempoSlider = document.getElementById("tempo");
@@ -434,6 +458,15 @@ function addLine(restoreBeats, afterId){
   var actions = document.createElement("div");
   actions.className = "head-actions";
 
+  var linePlayBtn = document.createElement("button");
+  linePlayBtn.className = "remove-line";
+  linePlayBtn.textContent = "▶";
+  linePlayBtn.title = "Play this avartanam";
+  linePlayBtn.addEventListener("click", function(){
+    var lo = lines.find(function(l){ return l.id === id; });
+    if (lo) playFlat(flattenBeats([lo]));
+  });
+
   var upBtn = document.createElement("button");
   upBtn.className = "remove-line";
   upBtn.textContent = "↑";
@@ -462,6 +495,7 @@ function addLine(restoreBeats, afterId){
     scheduleSave();
   });
 
+  actions.appendChild(linePlayBtn);
   actions.appendChild(upBtn);
   actions.appendChild(dnBtn);
   actions.appendChild(copyBtn);
@@ -530,6 +564,7 @@ function rebuildAllLines(){
 }
 
 talaSelect.addEventListener("change", rebuildAllLines);
+scaleSelect.addEventListener("change", scheduleSave);
 addLineBtn.addEventListener("click", function(){ addLine(); scheduleSave(); });
 addLineBtn2.addEventListener("click", function(){ addLine(); scheduleSave(); });
 
@@ -544,6 +579,7 @@ clearBtn.addEventListener("click", function(){
 function serializeState(){
   return {
     tala: talaSelect.value,
+    scale: scaleSelect.value,
     tempo: tempoSlider.value,
     lines: lines.map(function(lineObj){
       return lineObj.beats.map(function(bd){
@@ -601,9 +637,10 @@ function beatRawWithOctaves(bd){
   return out;
 }
 
-exportTxtBtn.addEventListener("click", function(){
+exportTxtBtn.addEventListener("click", async function(){
   var out = [];
   out.push("TALA:" + talaSelect.value);
+  out.push("SCALE:" + scaleSelect.value);
   out.push("TEMPO:" + tempoSlider.value);
   lines.forEach(function(lineObj, li){
     var parts = [];
@@ -620,24 +657,46 @@ exportTxtBtn.addEventListener("click", function(){
     out.push("Avartanam " + (li+1) + ":  || " + parts.join(" | ") + " ||");
   });
   var text = out.join("\n");
-  var blob = new Blob([text], {type: "text/plain"});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement("a");
-  a.href = url;
-  a.download = "notation.txt";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+
+  if (window.showSaveFilePicker) {
+    try {
+      var fileHandle = await window.showSaveFilePicker({
+        suggestedName: "notation.txt",
+        types: [{ description: "Text file", accept: {"text/plain": [".txt"]} }]
+      });
+      var writable = await fileHandle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      saveStatus.textContent = "Exported";
+      setTimeout(function(){ if (saveStatus.textContent === "Exported") saveStatus.textContent = ""; }, 1200);
+    } catch (e) {
+      if (e.name !== "AbortError") saveStatus.textContent = "Could not save file";
+    }
+  } else {
+    var name = window.prompt("Save as:", "notation");
+    if (name === null) return;
+    name = name.trim() || "notation";
+    var blob = new Blob([text], {type: "text/plain"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name + ".txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 });
 
 function parseLoadedText(text){
   var lines2 = text.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
   var talaKey = "adi";
+  var scaleKey = "mohanam";
   var tempo = "80";
   var avartanams = [];
   lines2.forEach(function(line){
     if (line.indexOf("TALA:") === 0){ talaKey = line.slice(5).trim(); return; }
+    if (line.indexOf("SCALE:") === 0){ scaleKey = line.slice(6).trim(); return; }
     if (line.indexOf("TEMPO:") === 0){ tempo = line.slice(6).trim(); return; }
     var m = line.match(/Avartanam\s+\d+:\s*\|\|(.*)\|\|/);
     if (!m) return;
@@ -650,7 +709,7 @@ function parseLoadedText(text){
     });
     avartanams.push(beatStrings);
   });
-  return { tala: talaKey, tempo: tempo, avartanams: avartanams };
+  return { tala: talaKey, scale: scaleKey, tempo: tempo, avartanams: avartanams };
 }
 
 function beatStringToRestoreEntry(s){
@@ -712,6 +771,7 @@ loadInput.addEventListener("change", function(){
       lines = [];
       lineCounter = 0;
       talaSelect.value = TALAS[parsed.tala] ? parsed.tala : "adi";
+      scaleSelect.value = SCALES[parsed.scale] ? parsed.scale : "mohanam";
       tempoSlider.value = parsed.tempo;
       tempoOut.textContent = parsed.tempo + " bpm";
       parsed.avartanams.forEach(function(beatStrings){
@@ -776,7 +836,7 @@ exportPdfBtn.addEventListener("click", function(){
     '@media print{body{padding:24px;} .line{font-size:14px;}}' +
     '</style></head><body>' +
     '<h1>Jatiswaram notation</h1>' +
-    '<div class="sub">Tala: ' + tala.label + '</div>' +
+    '<div class="sub">Tala: ' + tala.label + ' &nbsp;·&nbsp; Raga: ' + (SCALES[scaleSelect.value] || SCALES.mohanam).label + '</div>' +
     '<hr>' +
     rowsHtml +
     '<div class="footer">Dot above a letter = upper octave. Dot below = lower octave. | divides angas, &#8214; marks the samam.</div>' +
@@ -790,21 +850,11 @@ exportPdfBtn.addEventListener("click", function(){
   setTimeout(function(){ w.print(); }, 300);
 });
 
-var NOTE_FREQ = { s:261.63, r:293.66, g:329.63, m:349.23, p:392.00, d:440.00, n:493.88 };
-
 var isPlaying = false;
-playBtn.addEventListener("click", function(){
-  if (isPlaying) return;
-  if (typeof Tone === "undefined") return;
-  Tone.start();
-  isPlaying = true;
-  playLabel.textContent = "Playing";
-  var synth = new Tone.Synth().toDestination();
-  var bpm = parseInt(tempoSlider.value, 10);
-  var matraDur = 60 / bpm;
 
+function flattenBeats(linesArray){
   var flat = [];
-  lines.forEach(function(lineObj){
+  linesArray.forEach(function(lineObj){
     lineObj.beats.forEach(function(bd){
       if (bd.tokens.length === 0){
         flat.push({ letter: null, count: MATRAS_PER_BEAT, octave: 0, el: bd.el });
@@ -819,12 +869,22 @@ playBtn.addEventListener("click", function(){
       });
     });
   });
+  return flat;
+}
 
+function playFlat(flat, onDone){
+  if (isPlaying) return;
+  if (typeof Tone === "undefined") return;
+  Tone.start();
+  isPlaying = true;
+  var synth = new Tone.Synth().toDestination();
+  var bpm = parseInt(tempoSlider.value, 10);
+  var matraDur = 60 / bpm;
   var t = 0;
   flat.forEach(function(note){
     var dur = note.count * matraDur;
     if (!note.letter){ t += dur; return; }
-    var base = NOTE_FREQ[note.letter] || 261.63;
+    var base = (SCALES[scaleSelect.value] || SCALES.mohanam).freq[note.letter] || 261.63;
     var freq = base;
     if (note.octave === 1) freq = base * 2;
     if (note.octave === -1) freq = base / 2;
@@ -838,22 +898,29 @@ playBtn.addEventListener("click", function(){
     })(freq, t, dur, note.el);
     t += dur;
   });
-
   Tone.Transport.bpm.value = 120;
   Tone.Transport.start("+0.05");
   setTimeout(function(){
     Tone.Transport.stop();
     Tone.Transport.cancel();
     isPlaying = false;
-    playLabel.textContent = "Play all";
+    if (onDone) onDone();
   }, (t + 0.3) * 1000);
+}
+
+playBtn.addEventListener("click", function(){
+  if (isPlaying) return;
+  playLabel.textContent = "Playing";
+  playFlat(flattenBeats(lines), function(){ playLabel.textContent = "Play all"; });
 });
 
 (function init(){
   talaSelect.value = "adi";
+  scaleSelect.value = "mohanam";
   var saved = loadSaved();
   if (saved && saved.lines && saved.lines.length){
     talaSelect.value = saved.tala || "adi";
+    if (saved.scale && SCALES[saved.scale]) scaleSelect.value = saved.scale;
     if (saved.tempo){ tempoSlider.value = saved.tempo; tempoOut.textContent = saved.tempo + " bpm"; }
     saved.lines.forEach(function(beatsForLine){
       addLine(beatsForLine);
