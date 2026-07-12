@@ -25,16 +25,22 @@ GEORGIA_BOLD = "/System/Library/Fonts/Supplemental/Georgia Bold.ttf"
 
 
 def parse_beat_string(s):
-    """Return list of (text, underline) pairs for one beat token string."""
+    """Return list of (text, underline, octave) triples for one beat token string.
+    octave: 1=upper, -1=lower, 0=middle; None for carry/extension tokens."""
     if s in ("....", "----", ""):
         return []
-    parts, group, in_dbl = [], "", False
+    parts = []
+    in_dbl = False
+    # collect consecutive tokens before flushing a group
+    group_text, group_oct = "", []
 
     def flush():
-        nonlocal group
-        if group:
-            parts.append((group, in_dbl))
-            group = ""
+        nonlocal group_text, group_oct
+        if group_text:
+            # For a group: use first token's octave (common case), None means mixed
+            oct = group_oct[0] if group_oct else 0
+            parts.append((group_text, in_dbl, oct))
+            group_text = ""; group_oct = []
 
     i = 0
     while i < len(s):
@@ -42,22 +48,26 @@ def parse_beat_string(s):
         if ch == "[":   flush(); in_dbl = True;  i += 1; continue
         if ch == "]":   flush(); in_dbl = False; i += 1; continue
         if ch in ("^", "_"):
-            oct_mark = "̇" if ch == "^" else "̣"   # combining dots
+            oct = 1 if ch == "^" else -1
             i += 1
             if i < len(s) and s[i].isalpha():
                 let = s[i]; i += 1
-                if i < len(s) and s[i] in "123": i += 1      # skip variant
+                if i < len(s) and s[i] in "123": i += 1
                 ext = ""
                 while i < len(s) and s[i] in (",", ";"): ext += s[i]; i += 1
-                group += let + oct_mark + ext
+                if not in_dbl: flush()
+                group_text += let + ext; group_oct.append(oct)
+                if not in_dbl: flush()
         elif ch.isalpha():
             let = ch; i += 1
             if i < len(s) and s[i] in "123": i += 1
             ext = ""
             while i < len(s) and s[i] in (",", ";"): ext += s[i]; i += 1
-            group += let + ext
+            if not in_dbl: flush()
+            group_text += let + ext; group_oct.append(0)
+            if not in_dbl: flush()
         elif ch in (",", ";"):
-            group += ch; i += 1
+            group_text += ch; i += 1
         else:
             i += 1
     flush()
@@ -69,16 +79,19 @@ def parse_txt(path):
         lines = [l.strip() for l in f if l.strip()]
     tala_key, scale_key = "adi", "mohanam"
     avartanams = []
+    pending_annotation = ""
     for line in lines:
-        if line.startswith("TALA:"):  tala_key  = line[5:].strip(); continue
-        if line.startswith("SCALE:"): scale_key = line[6:].strip(); continue
-        if line.startswith("TEMPO:"): continue
+        if line.startswith("TALA:"):    tala_key  = line[5:].strip(); continue
+        if line.startswith("SCALE:"):   scale_key = line[6:].strip(); continue
+        if line.startswith("TEMPO:"):   continue
+        if line.startswith("SECTION:"): pending_annotation = line[8:].strip(); continue
         m = re.match(r"Avartanam\s+\d+:\s*\|\|(.*)\|\|", line)
         if not m: continue
         beats = []
         for part in m.group(1).strip().split("|"):
             beats.extend(part.strip().split())
-        avartanams.append(beats)
+        avartanams.append({"annotation": pending_annotation, "beats": beats})
+        pending_annotation = ""
     return tala_key, scale_key, avartanams
 
 
@@ -127,7 +140,22 @@ def make_pdf(txt_path, pdf_path):
     LINE_H = 10
     y = 44
 
-    for beat_strings in avartanams:
+    for av in avartanams:
+        annotation  = av["annotation"] if isinstance(av, dict) else ""
+        beat_strings = av["beats"]    if isinstance(av, dict) else av
+
+        if annotation:
+            if y + 14 > PH - 16:
+                pdf.add_page(); y = 20
+            pdf.set_font("GeoB", "", 11)
+            pdf.set_text_color(*DARK)
+            pdf.set_xy(ML, y); pdf.cell(0, 6, annotation)
+            y += 6
+            pdf.set_draw_color(*RED)
+            pdf.set_line_width(0.4)
+            pdf.line(ML, y, PW - MR, y)
+            y += 5
+
         if y + LINE_H > PH - 16:
             pdf.add_page(); y = 20
 
@@ -148,11 +176,15 @@ def make_pdf(txt_path, pdf_path):
                 if not parts:
                     x += beat_w; continue
 
-                pdf.set_font("Geo", "", NOTE_SZ)
-                total_w = sum(pdf.get_string_width(t) for t, _ in parts)
+                def note_font(oct): return "GeoB" if oct == 1 else "Geo"
+                total_w = 0
+                for text, underline, octave in parts:
+                    pdf.set_font(note_font(octave), "", NOTE_SZ)
+                    total_w += pdf.get_string_width(text)
                 cx = x + (beat_w - total_w) / 2
 
-                for text, underline in parts:
+                for text, underline, octave in parts:
+                    pdf.set_font(note_font(octave), "", NOTE_SZ)
                     tw = pdf.get_string_width(text)
                     pdf.set_text_color(*DARK)
                     pdf.set_xy(cx, y - 4); pdf.cell(tw, 6, text)
@@ -160,6 +192,14 @@ def make_pdf(txt_path, pdf_path):
                         pdf.set_draw_color(*DARK)
                         pdf.set_line_width(0.3)
                         pdf.line(cx, y + 1.5, cx + tw, y + 1.5)
+                    if octave == 1:
+                        pdf.set_font("GeoB", "", 9)
+                        pdf.set_xy(cx + tw / 2 - 1.2, y - 8.5); pdf.cell(2.4, 3, "·")
+                        pdf.set_font("GeoB", "", NOTE_SZ)
+                    elif octave == -1:
+                        pdf.set_font("Geo", "", 9)
+                        pdf.set_xy(cx + tw / 2 - 1.2, y + 1.5); pdf.cell(2.4, 3, "·")
+                        pdf.set_font("Geo", "", NOTE_SZ)
                     cx += tw
 
                 x += beat_w

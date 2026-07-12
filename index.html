@@ -111,14 +111,25 @@
   .beat-box input { width: 84px; height: 34px; padding: 0 6px; text-align: center; font-family: var(--font-voice); font-size: 15px; }
   .chip-wrap { display: flex; gap: 3px; min-height: 20px; flex-wrap: wrap; justify-content: center; }
   .chip {
-    min-width: 20px; height: 20px; padding: 0 4px; font-size: 12px; font-family: var(--font-voice);
+    min-width: 24px; height: 24px; padding: 0 5px; font-size: 12px; font-family: var(--font-voice);
     border: 0.5px solid var(--border); border-radius: 4px; background: var(--surface-2);
-    cursor: pointer; line-height: 1;
+    cursor: pointer; line-height: 1; overflow: visible;
+    display: inline-flex; align-items: center; justify-content: center;
   }
+  .cl { position: relative; display: inline-block; }
+  .oct-up > .cl::after { content: '·'; position: absolute; top: -0.7em; left: 50%; transform: translateX(-50%); font-size: 1.1em; font-weight: bold; line-height: 1; }
+  .oct-dn > .cl::after { content: '·'; position: absolute; bottom: -0.65em; left: 50%; transform: translateX(-50%); font-size: 1.1em; line-height: 1; }
   .count-tag { font-size: 10px; color: var(--text-muted); }
   .anga-total { font-size: 11px; font-weight: 500; color: var(--text-muted); }
   .split-btn { font-size: 10px; height: 18px; padding: 0 6px; border-radius: 4px; margin-top: 1px; }
   .chip.chip-fast { color: var(--text-accent); border-color: var(--text-accent); }
+  .annot-input {
+    width: 100%; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    border: none; border-bottom: 1px dashed var(--border); border-radius: 0;
+    background: transparent; padding: 2px 0; height: 22px; margin-bottom: 8px;
+  }
+  .annot-input:focus { outline: none; border-bottom-color: var(--text-accent); color: var(--text-primary); }
+  .annot-input::placeholder { font-weight: 400; font-style: italic; }
 
   .anga-laghu      { background: var(--c-teal-50); }
   .anga-dhrutam    { background: var(--c-coral-50); }
@@ -151,6 +162,7 @@
       </div>
     </div>
     <button id="playBtn"><span>&#9658;</span><span id="playLabel">Play all</span></button>
+    <button id="gamakaBtn" title="Toggle gamaka (ornament) playback">Gamaka: off</button>
     <button id="addLineBtn">+ Add avartanam</button>
     <button id="clearBtn">Clear all</button>
     <button id="exportTxtBtn">Export text</button>
@@ -216,6 +228,26 @@ var SCALES = {
   todi:             { label:"Todi",              freq:{s:261.63,r:277.18,g:311.13,m:349.23,p:392.00,d:415.30,n:466.16} },
   charukeshi:       { label:"Charukeshi",        freq:{s:261.63,r:293.66,g:329.63,m:349.23,p:392.00,d:415.30,n:466.16} },
   mayamalavagowla:  { label:"Mayamalavagowla",   freq:{s:261.63,r:277.18,g:329.63,m:349.23,p:392.00,d:415.30,n:493.88} },
+};
+
+// Per-raga gamaka profiles.
+// jaru: slide from a neighbouring note into the target.
+//   fromLetter = source note, octaveShift = +1 means start one octave above source.
+// kampita: oscillate above base pitch (rate Hz, cents range).
+var GAMAKA_PROFILES = {
+  mohanam: {
+    r: { type:"jaru",    fromLetter:"g", octaveShift:0 },  // G3 → R2
+    d: { type:"jaru",    fromLetter:"s", octaveShift:1 },  // S' → D2
+  },
+  shankarabharanam: { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:70}, d:{type:"kampita",rate:4,cents:50} },
+  kalyani:          { g:{type:"kampita",rate:6,cents:80}, m:{type:"kampita",rate:4,cents:50}, n:{type:"kampita",rate:5,cents:70} },
+  harikambhoji:     { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:60}, d:{type:"kampita",rate:4,cents:40} },
+  kambhoji:         { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:60}, d:{type:"kampita",rate:4,cents:40} },
+  kharaharapriya:   { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:70} },
+  natabhairavi:     { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:70} },
+  todi:             { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:70} },
+  charukeshi:       { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:70} },
+  mayamalavagowla:  { g:{type:"kampita",rate:6,cents:80}, n:{type:"kampita",rate:5,cents:70} },
 };
 
 var talaSelect = document.getElementById("talaSelect");
@@ -317,9 +349,16 @@ function renderChips(bd){
       return;
     }
     var dispLetter = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
-    var mark = tok.octave === 1 ? "\u0307" : (tok.octave === -1 ? "\u0323" : "");
     var sup = tok.variant ? ({"1":"\u00b9","2":"\u00b2","3":"\u00b3"}[tok.variant] || tok.variant) : "";
-    chip.textContent = dispLetter + mark + sup;
+    var lSpan = '<span class="cl">' + dispLetter + '</span>';
+    var supHtml = sup ? '<span style="font-size:0.6em;vertical-align:top;line-height:0;margin-left:1px">' + sup + '</span>' : '';
+    if (tok.octave === 1) {
+      chip.innerHTML = '<strong class="oct-up">' + lSpan + '</strong>' + supHtml;
+    } else if (tok.octave === -1) {
+      chip.innerHTML = '<span class="oct-dn">' + lSpan + '</span>' + supHtml;
+    } else {
+      chip.innerHTML = lSpan + supHtml;
+    }
     if (tok.doubleSpeed) chip.classList.add("chip-fast");
     chip.title = (tok.doubleSpeed ? "2\u00d7 speed \u2014 " : "") + (tok.variant ? tok.letter.toUpperCase() + tok.variant + " variant \u2014 " : "") + "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
     chip.style.color = tok.octave === 1 ? "var(--text-accent)" : (tok.octave === -1 ? "var(--text-danger)" : "var(--text-primary)");
@@ -488,7 +527,13 @@ function validateAnga(lineObj, angaIdx){
 }
 
 
-function addLine(restoreBeats, afterId){
+function addLine(restoreData, afterId){
+  var restoreBeats = null;
+  var restoreAnnotation = "";
+  if (restoreData){
+    if (Array.isArray(restoreData)){ restoreBeats = restoreData; }
+    else { restoreBeats = restoreData.beats; restoreAnnotation = restoreData.annotation || ""; }
+  }
   lineCounter++;
   var id = lineCounter;
   var container = document.createElement("div");
@@ -549,7 +594,16 @@ function addLine(restoreBeats, afterId){
   head.appendChild(actions);
   container.appendChild(head);
 
-  var lineObj = { id: id, container: container, titleEl: title, beats: [] };
+  // Annotation text field (section label)
+  var annotInput = document.createElement("input");
+  annotInput.type = "text";
+  annotInput.className = "annot-input";
+  annotInput.placeholder = "Section label… (optional)";
+  annotInput.value = restoreAnnotation;
+  container.appendChild(annotInput);
+
+  var lineObj = { id: id, container: container, titleEl: title, annotEl: annotInput, annotation: restoreAnnotation, beats: [] };
+  annotInput.addEventListener("input", function(){ lineObj.annotation = annotInput.value; scheduleSave(); });
 
   if (afterId !== undefined){
     var afterIdx = lines.findIndex(function(l){ return l.id === afterId; });
@@ -595,10 +649,13 @@ function moveLineDn(id){
 
 function copyLine(id){
   var lineObj = lines.find(function(l){ return l.id === id; });
-  var restoreBeats = lineObj.beats.map(function(bd){
-    return { raw: bd.raw, octaves: bd.tokens.filter(function(t){ return !t.carry; }).map(function(t){ return t.octave; }) };
-  });
-  addLine(restoreBeats, id);
+  var restoreData = {
+    annotation: lineObj.annotation || "",
+    beats: lineObj.beats.map(function(bd){
+      return { raw: bd.raw, octaves: bd.tokens.filter(function(t){ return !t.carry; }).map(function(t){ return t.octave; }) };
+    })
+  };
+  addLine(restoreData, id);
   renumber();
   scheduleSave();
 }
@@ -627,9 +684,12 @@ function serializeState(){
     scale: scaleSelect.value,
     tempo: tempoSlider.value,
     lines: lines.map(function(lineObj){
-      return lineObj.beats.map(function(bd){
-        return { raw: bd.raw, octaves: bd.tokens.filter(function(t){return !t.carry;}).map(function(t){ return t.octave; }) };
-      });
+      return {
+        annotation: lineObj.annotation || "",
+        beats: lineObj.beats.map(function(bd){
+          return { raw: bd.raw, octaves: bd.tokens.filter(function(t){return !t.carry;}).map(function(t){ return t.octave; }) };
+        })
+      };
     })
   };
 }
@@ -698,6 +758,7 @@ exportTxtBtn.addEventListener("click", async function(){
   out.push("SCALE:" + scaleSelect.value);
   out.push("TEMPO:" + tempoSlider.value);
   lines.forEach(function(lineObj, li){
+    if (lineObj.annotation) out.push("SECTION:" + lineObj.annotation);
     var parts = [];
     var tala = TALAS[talaSelect.value];
     var idx = 0;
@@ -749,10 +810,12 @@ function parseLoadedText(text){
   var scaleKey = "mohanam";
   var tempo = "80";
   var avartanams = [];
+  var pendingAnnotation = "";
   lines2.forEach(function(line){
     if (line.indexOf("TALA:") === 0){ talaKey = line.slice(5).trim(); return; }
     if (line.indexOf("SCALE:") === 0){ scaleKey = line.slice(6).trim(); return; }
     if (line.indexOf("TEMPO:") === 0){ tempo = line.slice(6).trim(); return; }
+    if (line.indexOf("SECTION:") === 0){ pendingAnnotation = line.slice(8).trim(); return; }
     var m = line.match(/Avartanam\s+\d+:\s*\|\|(.*)\|\|/);
     if (!m) return;
     var body = m[1].trim();
@@ -762,7 +825,8 @@ function parseLoadedText(text){
       var beats = part.split(/\s+/).filter(Boolean);
       beatStrings = beatStrings.concat(beats);
     });
-    avartanams.push(beatStrings);
+    avartanams.push({ annotation: pendingAnnotation, beatStrings: beatStrings });
+    pendingAnnotation = "";
   });
   return { tala: talaKey, scale: scaleKey, tempo: tempo, avartanams: avartanams };
 }
@@ -831,9 +895,11 @@ loadInput.addEventListener("change", function(){
       scaleSelect.value = SCALES[parsed.scale] ? parsed.scale : "mohanam";
       tempoSlider.value = parsed.tempo;
       tempoOut.textContent = parsed.tempo + " bpm";
-      parsed.avartanams.forEach(function(beatStrings){
+      parsed.avartanams.forEach(function(av){
+        var beatStrings = Array.isArray(av) ? av : av.beatStrings;
+        var annotation  = Array.isArray(av) ? "" : (av.annotation || "");
         var restoreBeats = beatStrings.map(beatStringToRestoreEntry);
-        addLine(restoreBeats);
+        addLine({ annotation: annotation, beats: restoreBeats });
       });
       scheduleSave();
       saveStatus.textContent = "Loaded " + parsed.avartanams.length + " avartanam" + (parsed.avartanams.length > 1 ? "s" : "");
@@ -889,11 +955,10 @@ function formatBeatForPdf(bd){
 
 function tokenToStr(tok){
   var l = tok.count >= 2 ? tok.letter.toUpperCase() : tok.letter;
-  var mark = tok.octave === 1 ? "̇" : (tok.octave === -1 ? "̣" : "");
   var ext = "", extra = tok.count - (tok.count >= 2 ? 2 : 1);
   while (extra >= 2){ ext += ";"; extra -= 2; }
   while (extra >= 1){ ext += ","; extra -= 1; }
-  return l + mark + ext;
+  return l + ext;
 }
 
 function drawPdfBeat(doc, bd, x, y, beatW){
@@ -906,23 +971,29 @@ function drawPdfBeat(doc, bd, x, y, beatW){
       var rem = tok.count, s = "";
       while (rem >= 2){ s += ";"; rem -= 2; }
       while (rem >= 1){ s += ","; rem -= 1; }
-      parts.push({ text: s, underline: false });
+      parts.push({ text: s, underline: false, octave: 0 });
       i++; continue;
     }
     if (tok.doubleSpeed){
-      var group = "";
+      var group = ""; var groupToks = [];
       while (i < bd.tokens.length && bd.tokens[i].doubleSpeed && !bd.tokens[i].carry){
-        group += tokenToStr(bd.tokens[i]); i++;
+        group += tokenToStr(bd.tokens[i]); groupToks.push(bd.tokens[i]); i++;
       }
-      parts.push({ text: group, underline: true });
+      parts.push({ text: group, underline: true, octave: null, groupToks: groupToks });
     } else {
-      parts.push({ text: tokenToStr(tok), underline: false });
+      parts.push({ text: tokenToStr(tok), underline: false, octave: tok.octave });
       i++;
     }
   }
-  var totalW = parts.reduce(function(s, p){ return s + doc.getTextWidth(p.text); }, 0);
-  var cx = x + (beatW - totalW) / 2;
+  var totalW = 0;
   parts.forEach(function(p){
+    doc.setFont("times", p.octave === 1 ? "bold" : "normal");
+    totalW += doc.getTextWidth(p.text);
+  });
+  var cx = x + (beatW - totalW) / 2;
+  var baseSz = doc.getFontSize();
+  parts.forEach(function(p){
+    doc.setFont("times", p.octave === 1 ? "bold" : "normal");
     var tw = doc.getTextWidth(p.text);
     doc.text(p.text, cx, y);
     if (p.underline){
@@ -931,8 +1002,34 @@ function drawPdfBeat(doc, bd, x, y, beatW){
       doc.line(cx, y + 0.8, cx + tw, y + 0.8);
       doc.setDrawColor(0);
     }
+    if (p.octave === 1){
+      doc.setFontSize(11); doc.setFont("times", "bold");
+      doc.text("·", cx + tw / 2, y - 3.5, { align: "center" });
+      doc.setFont("times", "normal"); doc.setFontSize(baseSz);
+    } else if (p.octave === -1){
+      doc.setFontSize(11);
+      doc.text("·", cx + tw / 2, y + 3.2, { align: "center" });
+      doc.setFontSize(baseSz);
+    } else if (p.groupToks) {
+      var gx = cx;
+      p.groupToks.forEach(function(gt){
+        doc.setFont("times", "normal");
+        var gtw = doc.getTextWidth(tokenToStr(gt));
+        if (gt.octave === 1){
+          doc.setFontSize(11); doc.setFont("times","bold");
+          doc.text("·", gx + gtw/2, y - 3.5, {align:"center"});
+          doc.setFont("times","normal"); doc.setFontSize(baseSz);
+        } else if (gt.octave === -1){
+          doc.setFontSize(11);
+          doc.text("·", gx + gtw/2, y + 3.2, {align:"center"});
+          doc.setFontSize(baseSz);
+        }
+        gx += gtw;
+      });
+    }
     cx += tw;
   });
+  doc.setFont("times", "normal");
 }
 
 exportPdfBtn.addEventListener("click", function(){
@@ -973,6 +1070,18 @@ exportPdfBtn.addEventListener("click", function(){
   var y = 44;
 
   lines.forEach(function(lineObj){
+    if (lineObj.annotation) {
+      if (y + 14 > PH - 18){ doc.addPage(); y = 20; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(26, 26, 26);
+      doc.text(lineObj.annotation, ML, y);
+      y += 4;
+      doc.setDrawColor(153, 60, 29);
+      doc.setLineWidth(0.4);
+      doc.line(ML, y, PW - MR, y);
+      y += 6;
+    }
     if (y + lineH > PH - 18){ doc.addPage(); y = 20; }
     doc.setFont("times", "normal");
     doc.setFontSize(13);
@@ -1018,6 +1127,14 @@ exportPdfBtn.addEventListener("click", function(){
 });
 
 var isPlaying = false;
+var gamakaEnabled = false;
+
+var gamakaBtn = document.getElementById("gamakaBtn");
+gamakaBtn.addEventListener("click", function(){
+  gamakaEnabled = !gamakaEnabled;
+  gamakaBtn.textContent = "Gamaka: " + (gamakaEnabled ? "on" : "off");
+  gamakaBtn.style.color = gamakaEnabled ? "var(--text-accent)" : "";
+});
 
 function flattenBeats(linesArray){
   var flat = [];
@@ -1045,34 +1162,81 @@ function playFlat(flat, onDone){
   if (typeof Tone === "undefined") return;
   Tone.start();
   isPlaying = true;
-  var synth = new Tone.Synth().toDestination();
+
+  var scaleKey = scaleSelect.value;
+  var scaleFreqs = (SCALES[scaleKey] || SCALES.mohanam).freq;
+  var gamakaProfile = gamakaEnabled ? (GAMAKA_PROFILES[scaleKey] || {}) : null;
+
+  var synth = new Tone.Synth(gamakaProfile ? {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.015, decay: 0.05, sustain: 0.85, release: 0.1 }
+  } : {}).toDestination();
+
   var bpm = parseInt(tempoSlider.value, 10);
   var matraDur = 60 / bpm;
   var t = 0;
+
   flat.forEach(function(note){
     var dur = note.count * matraDur;
     if (!note.letter){ t += dur; return; }
+
     var base = (note.variant && VARIANT_FREQ[note.letter + note.variant])
       ? VARIANT_FREQ[note.letter + note.variant]
-      : (SCALES[scaleSelect.value] || SCALES.mohanam).freq[note.letter] || 261.63;
-    var freq = base;
-    if (note.octave === 1) freq = base * 2;
-    if (note.octave === -1) freq = base / 2;
-    (function(freq, time, dur, el){
-      Tone.Transport.scheduleOnce(function(){
-        synth.triggerAttackRelease(freq, dur * 0.85);
+      : scaleFreqs[note.letter] || 261.63;
+    var freq = note.octave === 1 ? base * 2 : note.octave === -1 ? base / 2 : base;
+
+    (function(freq, noteLetter, noteOctave, time, dur, el){
+      Tone.Transport.scheduleOnce(function(audioTime){
+        var releaseDur = dur * (gamakaProfile ? 0.92 : 0.85);
+
+        synth.triggerAttack(freq, audioTime);
+
+        if (gamakaProfile) {
+          var gk = gamakaProfile[noteLetter];
+          if (gk) {
+            if (gk.type === "jaru") {
+              // Slide from a neighbouring note's frequency into this note
+              var fromBase = scaleFreqs[gk.fromLetter] || 261.63;
+              var octMult = noteOctave === 1 ? 2 : noteOctave === -1 ? 0.5 : 1;
+              var fromFreq = fromBase * octMult * Math.pow(2, gk.octaveShift || 0);
+              var slideDur = Math.min(dur * 0.45, 0.12);
+              synth.frequency.setValueAtTime(fromFreq, audioTime);
+              synth.frequency.linearRampToValueAtTime(freq, audioTime + slideDur);
+            } else if (gk.type === "kampita") {
+              // Oscillate above base pitch during sustain
+              var hiFreq = freq * Math.pow(2, gk.cents / 1200);
+              var halfPeriod = 0.5 / gk.rate;
+              var kampStart = audioTime + 0.02;
+              var kampEnd   = audioTime + releaseDur - halfPeriod;
+              var tk = kampStart;
+              var goHi = true;
+              while (tk + halfPeriod < kampEnd) {
+                tk += halfPeriod;
+                synth.frequency.linearRampToValueAtTime(goHi ? hiFreq : freq, tk);
+                goHi = !goHi;
+              }
+              synth.frequency.linearRampToValueAtTime(freq, audioTime + releaseDur);
+            }
+          }
+        }
+
+        synth.triggerRelease(audioTime + releaseDur);
+
         var origBg = el.style.background;
         el.style.background = "#cfe6fb";
         setTimeout(function(){ el.style.background = origBg; }, dur * 900);
       }, time);
-    })(freq, t, dur, note.el);
+    })(freq, note.letter, note.octave, t, dur, note.el);
+
     t += dur;
   });
+
   Tone.Transport.bpm.value = 120;
   Tone.Transport.start("+0.05");
   setTimeout(function(){
     Tone.Transport.stop();
     Tone.Transport.cancel();
+    synth.dispose();
     isPlaying = false;
     if (onDone) onDone();
   }, (t + 0.3) * 1000);
@@ -1092,8 +1256,9 @@ playBtn.addEventListener("click", function(){
     talaSelect.value = saved.tala || "adi";
     if (saved.scale && SCALES[saved.scale]) scaleSelect.value = saved.scale;
     if (saved.tempo){ tempoSlider.value = saved.tempo; tempoOut.textContent = saved.tempo + " bpm"; }
-    saved.lines.forEach(function(beatsForLine){
-      addLine(beatsForLine);
+    saved.lines.forEach(function(lineData){
+      // backward-compat: old saves are plain arrays of beats
+      addLine(Array.isArray(lineData) ? lineData : lineData);
     });
   } else {
     addLine();
