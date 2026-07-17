@@ -11,6 +11,7 @@ TALAS = {
     "triputa":      {"label": "Triputa (3+2+2)",    "angas": [3, 2, 2]},
     "jhampa":       {"label": "Jhampa (7+1+2)",     "angas": [7, 1, 2]},
     "ata":          {"label": "Ata (5+5+2+2)",      "angas": [5, 5, 2, 2]},
+    "eka":          {"label": "Eka (4)",             "angas": [4]},
 }
 SCALES = {
     "mohanam": "Mohanam", "shankarabharanam": "Shankarabharanam",
@@ -132,41 +133,15 @@ def make_pdf(txt_path, pdf_path):
     # ── measure widths ────────────────────────────────────────────────────────
     NOTE_SZ = 12
     pdf.set_font("GeoB", "", NOTE_SZ)
-    dbl_bar_w = pdf.get_string_width("||") + 2       # "||" stands for ‖
+    dbl_bar_w = pdf.get_string_width("||") + 2
     bar_w     = pdf.get_string_width("|")  + 2
-    total_bar_w = 2 * dbl_bar_w + (len(anga_beats) - 1) * bar_w
-    beat_w = (usable - total_bar_w) / total_beats
+    group_size = 2 if tala_key == "eka" else 1
+    group_bar_w = (group_size + 1) * dbl_bar_w + group_size * (len(anga_beats) - 1) * bar_w
+    beat_w = (usable - group_bar_w) / (total_beats * group_size)
 
-    LINE_H = 10
-    y = 44
+    def note_font(oct): return "GeoB" if oct == 1 else "Geo"
 
-    for av in avartanams:
-        annotation  = av["annotation"] if isinstance(av, dict) else ""
-        beat_strings = av["beats"]    if isinstance(av, dict) else av
-
-        if annotation:
-            if y + 14 > PH - 16:
-                pdf.add_page(); y = 20
-            pdf.set_font("GeoB", "", 11)
-            pdf.set_text_color(*DARK)
-            pdf.set_xy(ML, y); pdf.cell(0, 6, annotation)
-            y += 6
-            pdf.set_draw_color(*RED)
-            pdf.set_line_width(0.4)
-            pdf.line(ML, y, PW - MR, y)
-            y += 5
-
-        if y + LINE_H > PH - 16:
-            pdf.add_page(); y = 20
-
-        x = ML
-
-        # opening ||
-        pdf.set_font("GeoB", "", NOTE_SZ)
-        pdf.set_text_color(*RED)
-        pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
-        x += dbl_bar_w
-
+    def draw_av(beat_strings, x, y):
         beat_idx = 0
         for ai, nb in enumerate(anga_beats):
             for _ in range(nb):
@@ -175,46 +150,65 @@ def make_pdf(txt_path, pdf_path):
                 parts = parse_beat_string(bs)
                 if not parts:
                     x += beat_w; continue
-
-                def note_font(oct): return "GeoB" if oct == 1 else "Geo"
                 total_w = 0
                 for text, underline, octave in parts:
                     pdf.set_font(note_font(octave), "", NOTE_SZ)
                     total_w += pdf.get_string_width(text)
                 cx = x + (beat_w - total_w) / 2
-
                 for text, underline, octave in parts:
                     pdf.set_font(note_font(octave), "", NOTE_SZ)
                     tw = pdf.get_string_width(text)
                     pdf.set_text_color(*DARK)
                     pdf.set_xy(cx, y - 4); pdf.cell(tw, 6, text)
                     if underline:
-                        pdf.set_draw_color(*DARK)
-                        pdf.set_line_width(0.3)
+                        pdf.set_draw_color(*DARK); pdf.set_line_width(0.3)
                         pdf.line(cx, y + 1.5, cx + tw, y + 1.5)
                     if octave == 1:
                         pdf.set_font("GeoB", "", 9)
                         pdf.set_xy(cx + tw / 2 - 1.2, y - 8.5); pdf.cell(2.4, 3, "·")
-                        pdf.set_font("GeoB", "", NOTE_SZ)
                     elif octave == -1:
                         pdf.set_font("Geo", "", 9)
                         pdf.set_xy(cx + tw / 2 - 1.2, y + 1.5); pdf.cell(2.4, 3, "·")
-                        pdf.set_font("Geo", "", NOTE_SZ)
                     cx += tw
-
                 x += beat_w
-
             if ai < len(anga_beats) - 1:
-                pdf.set_font("GeoB", "", NOTE_SZ)
-                pdf.set_text_color(*RED)
+                pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
                 pdf.set_xy(x, y - 4); pdf.cell(bar_w, 6, "|")
                 x += bar_w
+        return x
 
-        # closing ||
-        pdf.set_font("GeoB", "", NOTE_SZ)
-        pdf.set_text_color(*RED)
+    LINE_H = 10
+    y = 44
+
+    i = 0
+    while i < len(avartanams):
+        group = avartanams[i : i + group_size]
+        i += group_size
+
+        annotation = (group[0]["annotation"] if isinstance(group[0], dict) else "")
+        if annotation:
+            if y + 14 > PH - 16:
+                pdf.add_page(); y = 20
+            pdf.set_font("GeoB", "", 11); pdf.set_text_color(*DARK)
+            pdf.set_xy(ML, y); pdf.cell(0, 6, annotation)
+            y += 6
+            pdf.set_draw_color(*RED); pdf.set_line_width(0.4)
+            pdf.line(ML, y, PW - MR, y)
+            y += 5
+
+        if y + LINE_H > PH - 16:
+            pdf.add_page(); y = 20
+
+        x = ML
+        for av in group:
+            beat_strings = av["beats"] if isinstance(av, dict) else av
+            pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
+            pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
+            x += dbl_bar_w
+            x = draw_av(beat_strings, x, y)
+
+        pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
         pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
-
         y += LINE_H
 
     # ── footer ────────────────────────────────────────────────────────────────
