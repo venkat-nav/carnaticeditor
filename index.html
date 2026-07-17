@@ -1070,16 +1070,17 @@ exportPdfBtn.addEventListener("click", function(){
   doc.setFontSize(13);
   var dblBarW = doc.getTextWidth("‖") + 2;
   var barW    = doc.getTextWidth("|") + 2;
-  var groupBarW = (groupSize + 1) * dblBarW + groupSize * numAngaSeps * barW;
-  var beatW = (usable - groupBarW) / (totalBeats * groupSize);
-
   var lineH = 11;
   var y = 44;
 
   var li = 0;
   while (li < lines.length) {
-    var group = lines.slice(li, Math.min(li + groupSize, lines.length));
-    li += groupSize;
+    var gs = groupSize;
+    if (gs === 2 && li + 1 < lines.length && lines[li + 1].annotation) gs = 1;
+    var group = lines.slice(li, Math.min(li + gs, lines.length));
+    li += group.length;
+    var groupBarW = (group.length + 1) * dblBarW + group.length * numAngaSeps * barW;
+    var beatW = (usable - groupBarW) / (totalBeats * group.length);
 
     if (group[0].annotation) {
       if (y + 14 > PH - 18){ doc.addPage(); y = 20; }

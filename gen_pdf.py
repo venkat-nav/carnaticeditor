@@ -136,8 +136,6 @@ def make_pdf(txt_path, pdf_path):
     dbl_bar_w = pdf.get_string_width("||") + 2
     bar_w     = pdf.get_string_width("|")  + 2
     group_size = 2 if tala_key == "eka" else 1
-    group_bar_w = (group_size + 1) * dbl_bar_w + group_size * (len(anga_beats) - 1) * bar_w
-    beat_w = (usable - group_bar_w) / (total_beats * group_size)
 
     def note_font(oct): return "GeoB" if oct == 1 else "Geo"
 
@@ -182,8 +180,14 @@ def make_pdf(txt_path, pdf_path):
 
     i = 0
     while i < len(avartanams):
-        group = avartanams[i : i + group_size]
-        i += group_size
+        gs = group_size
+        if gs == 2 and i + 1 < len(avartanams):
+            next_ann = avartanams[i + 1].get("annotation", "") if isinstance(avartanams[i + 1], dict) else ""
+            if next_ann: gs = 1
+        group = avartanams[i : i + gs]
+        i += len(group)
+        group_bar_w = (len(group) + 1) * dbl_bar_w + len(group) * (len(anga_beats) - 1) * bar_w
+        beat_w = (usable - group_bar_w) / (total_beats * len(group))
 
         annotation = (group[0]["annotation"] if isinstance(group[0], dict) else "")
         if annotation:
