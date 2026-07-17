@@ -1065,11 +1065,16 @@ exportPdfBtn.addEventListener("click", function(){
   var totalBeats = tala.angas.reduce(function(s, a){ return s + a.beats; }, 0);
   var numAngaSeps = tala.angas.length - 1;
   var groupSize = talaKey === "eka" ? 2 : 1;
+  var EKA_SEP = 5; // mm gap on each side of eka separator ‖
 
   doc.setFont("times", "normal");
   doc.setFontSize(13);
   var dblBarW = doc.getTextWidth("‖") + 2;
   var barW    = doc.getTextWidth("|") + 2;
+  // For eka, beat width is fixed (paired layout) regardless of solo/paired group
+  var ekaBeatW = talaKey === "eka"
+    ? (usable - 3 * dblBarW - 2 * EKA_SEP) / (2 * totalBeats)
+    : 0;
   var lineH = 11;
   var y = 44;
 
@@ -1079,8 +1084,9 @@ exportPdfBtn.addEventListener("click", function(){
     if (gs === 2 && li + 1 < lines.length && lines[li + 1].annotation) gs = 1;
     var group = lines.slice(li, Math.min(li + gs, lines.length));
     li += group.length;
-    var groupBarW = (group.length + 1) * dblBarW + group.length * numAngaSeps * barW;
-    var beatW = (usable - groupBarW) / (totalBeats * group.length);
+    var beatW = talaKey === "eka"
+      ? ekaBeatW
+      : (usable - (group.length + 1) * dblBarW - group.length * numAngaSeps * barW) / (totalBeats * group.length);
 
     if (group[0].annotation) {
       if (y + 14 > PH - 18){ doc.addPage(); y = 20; }
@@ -1100,12 +1106,25 @@ exportPdfBtn.addEventListener("click", function(){
     doc.setTextColor(26, 26, 26);
 
     var x = ML;
-    group.forEach(function(lineObj){
-      doc.setTextColor(153, 60, 29);
-      doc.setFont("times", "bold");
-      doc.text("‖", x, y);
-      x += dblBarW;
+    // Opening ‖
+    doc.setTextColor(153, 60, 29);
+    doc.setFont("times", "bold");
+    doc.text("‖", x, y);
+    x += dblBarW;
 
+    group.forEach(function(lineObj, gi){
+      if (gi > 0) {
+        // Gap + thin separator line + middle ‖ + gap
+        x += EKA_SEP;
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.3);
+        doc.line(x, y - 5, x, y + 1);
+        doc.setDrawColor(0);
+        doc.setTextColor(153, 60, 29);
+        doc.setFont("times", "bold");
+        doc.text("‖", x, y);
+        x += dblBarW + EKA_SEP;
+      }
       var beatIdx = 0;
       tala.angas.forEach(function(anga, angaIdx){
         doc.setFont("times", "normal");
@@ -1123,9 +1142,21 @@ exportPdfBtn.addEventListener("click", function(){
       });
     });
 
-    doc.setTextColor(153, 60, 29);
-    doc.setFont("times", "bold");
-    doc.text("‖", x, y);
+    // Closing ‖ — for solo eka draw separator then leave right blank
+    if (talaKey === "eka" && group.length === 1) {
+      x += EKA_SEP;
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.3);
+      doc.line(x, y - 5, x, y + 1);
+      doc.setDrawColor(0);
+      doc.setTextColor(153, 60, 29);
+      doc.setFont("times", "bold");
+      doc.text("‖", x, y);
+    } else {
+      doc.setTextColor(153, 60, 29);
+      doc.setFont("times", "bold");
+      doc.text("‖", x, y);
+    }
     doc.setTextColor(0);
     y += lineH;
   }

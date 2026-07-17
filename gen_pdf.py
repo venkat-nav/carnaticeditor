@@ -136,6 +136,13 @@ def make_pdf(txt_path, pdf_path):
     dbl_bar_w = pdf.get_string_width("||") + 2
     bar_w     = pdf.get_string_width("|")  + 2
     group_size = 2 if tala_key == "eka" else 1
+    EKA_SEP = 5  # mm gap on each side of eka separator
+
+    # For eka, always use paired beat width for consistency
+    if tala_key == "eka":
+        eka_beat_w = (usable - 3 * dbl_bar_w - 2 * EKA_SEP) / (2 * total_beats)
+    else:
+        eka_beat_w = 0
 
     def note_font(oct): return "GeoB" if oct == 1 else "Geo"
 
@@ -186,8 +193,11 @@ def make_pdf(txt_path, pdf_path):
             if next_ann: gs = 1
         group = avartanams[i : i + gs]
         i += len(group)
-        group_bar_w = (len(group) + 1) * dbl_bar_w + len(group) * (len(anga_beats) - 1) * bar_w
-        beat_w = (usable - group_bar_w) / (total_beats * len(group))
+        if tala_key == "eka":
+            beat_w = eka_beat_w
+        else:
+            group_bar_w = (len(group) + 1) * dbl_bar_w + len(group) * (len(anga_beats) - 1) * bar_w
+            beat_w = (usable - group_bar_w) / (total_beats * len(group))
 
         annotation = (group[0]["annotation"] if isinstance(group[0], dict) else "")
         if annotation:
@@ -204,15 +214,33 @@ def make_pdf(txt_path, pdf_path):
             pdf.add_page(); y = 20
 
         x = ML
-        for av in group:
-            beat_strings = av["beats"] if isinstance(av, dict) else av
-            pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
-            pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
-            x += dbl_bar_w
-            x = draw_av(beat_strings, x, y)
-
+        # Opening ||
         pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
         pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
+        x += dbl_bar_w
+
+        for gi, av in enumerate(group):
+            if gi > 0:
+                # Gap + thin separator line + middle || + gap
+                x += EKA_SEP
+                pdf.set_draw_color(180, 180, 180); pdf.set_line_width(0.3)
+                pdf.line(x, y - 5, x, y + 1)
+                pdf.set_draw_color(*RED); pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
+                pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
+                x += dbl_bar_w + EKA_SEP
+            beat_strings = av["beats"] if isinstance(av, dict) else av
+            x = draw_av(beat_strings, x, y)
+
+        # Closing || — solo eka: draw separator then leave right blank
+        if tala_key == "eka" and len(group) == 1:
+            x += EKA_SEP
+            pdf.set_draw_color(180, 180, 180); pdf.set_line_width(0.3)
+            pdf.line(x, y - 5, x, y + 1)
+            pdf.set_draw_color(*RED); pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
+            pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
+        else:
+            pdf.set_font("GeoB", "", NOTE_SZ); pdf.set_text_color(*RED)
+            pdf.set_xy(x, y - 4); pdf.cell(dbl_bar_w, 6, "||")
         y += LINE_H
 
     # ── footer ────────────────────────────────────────────────────────────────
