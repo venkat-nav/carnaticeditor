@@ -123,6 +123,7 @@
   .anga-total { font-size: 11px; font-weight: 500; color: var(--text-muted); }
   .split-btn { font-size: 10px; height: 18px; padding: 0 6px; border-radius: 4px; margin-top: 1px; }
   .chip.chip-fast { color: var(--text-accent); border-color: var(--text-accent); }
+  .chip.chip-slur { font-style: italic; color: #8b5cf6; border-color: #8b5cf6; }
   .annot-input {
     width: 100%; font-size: 12px; font-weight: 600; color: var(--text-secondary);
     border: none; border-bottom: 1px dashed var(--border); border-radius: 0;
@@ -290,14 +291,17 @@ var lines = [];
 var lineCounter = 0;
 var saveTimer = null;
 
-function parseBeat(raw){
+function parseBeat(raw, startInSlur){
   var tokens = [];
   var i = 0;
   var sawLetter = false;
   var inDouble = false;
+  var inSlur = !!startInSlur;
   while (i < raw.length){
     var ch = raw[i];
     if (ch === " "){ i++; continue; }
+    if (ch === "("){ inSlur = true;  i++; continue; }
+    if (ch === ")"){ inSlur = false; i++; continue; }
     if (ch === "," || ch === ";"){
       if (!sawLetter){
         var carryCount = (ch === ",") ? 1 : 2;
@@ -326,9 +330,9 @@ function parseBeat(raw){
       count += (raw[i] === ",") ? 1 : 2;
       i++;
     }
-    tokens.push({ letter: letter, count: count, octave: 0, variant: variant, doubleSpeed: inDouble });
+    tokens.push({ letter: letter, count: count, octave: 0, variant: variant, doubleSpeed: inDouble, slur: inSlur });
   }
-  return tokens;
+  return { tokens: tokens, slurPending: inSlur };
 }
 
 function beatTotal(tokens){
@@ -362,7 +366,8 @@ function renderChips(bd){
       chip.innerHTML = lSpan + supHtml;
     }
     if (tok.doubleSpeed) chip.classList.add("chip-fast");
-    chip.title = (tok.doubleSpeed ? "2\u00d7 speed \u2014 " : "") + (tok.variant ? tok.letter.toUpperCase() + tok.variant + " variant \u2014 " : "") + "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
+    if (tok.slur) chip.classList.add("chip-slur");
+    chip.title = (tok.doubleSpeed ? "2\u00d7 speed \u2014 " : "") + (tok.slur ? "bow/slur \u2014 " : "") + (tok.variant ? tok.letter.toUpperCase() + tok.variant + " variant \u2014 " : "") + "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
     chip.style.color = tok.octave === 1 ? "var(--text-accent)" : (tok.octave === -1 ? "var(--text-danger)" : "var(--text-primary)");
     chip.addEventListener("click", function(){
       tok.octave = tok.octave === 0 ? 1 : (tok.octave === 1 ? -1 : 0);
@@ -419,15 +424,24 @@ function buildLine(lineId, restoreBeats){
       splitBtn.textContent = "[2×]";
       splitBtn.title = "Wrap selected notes in [ ] for double speed";
 
-      var beatData = { angaIdx: angaIdx, beatIdx: b, el: input, countEl: countTag, chipWrap: chipWrap, raw: "", tokens: [] };
+      var bowBtn = document.createElement("button");
+      bowBtn.type = "button";
+      bowBtn.className = "split-btn";
+      bowBtn.textContent = "(bow)";
+      bowBtn.title = "Wrap selected notes in ( ) for single-bow legato";
+
+      var beatData = { angaIdx: angaIdx, beatIdx: b, el: input, countEl: countTag, chipWrap: chipWrap, raw: "", tokens: [], slurPending: false };
       lineObj.beats.push(beatData);
 
-      (function(beatData){
+      (function(beatData, bowBtn, input, splitBtn){
         var cursorIdx = lineObj.beats.length - 1;
         if (restoreBeats && restoreBeats[cursorIdx]){
           beatData.raw = restoreBeats[cursorIdx].raw || "";
           input.value = beatData.raw;
-          beatData.tokens = parseBeat(beatData.raw);
+          var prevPending = cursorIdx > 0 ? lineObj.beats[cursorIdx - 1].slurPending : false;
+          var result = parseBeat(beatData.raw, prevPending);
+          beatData.tokens = result.tokens;
+          beatData.slurPending = result.slurPending;
           if (restoreBeats[cursorIdx].octaves){
             var nonCarry = beatData.tokens.filter(function(t){return !t.carry;});
             nonCarry.forEach(function(tok, ti){
@@ -438,9 +452,7 @@ function buildLine(lineId, restoreBeats){
           updateBeatVisual(beatData);
         }
         splitBtn.addEventListener("click", function(){
-          var start = input.selectionStart;
-          var end = input.selectionEnd;
-          var val = input.value;
+          var start = input.selectionStart, end = input.selectionEnd, val = input.value;
           if (start === end){
             input.value = val.slice(0, start) + "[]" + val.slice(start);
             input.setSelectionRange(start + 1, start + 1);
@@ -448,30 +460,60 @@ function buildLine(lineId, restoreBeats){
             input.value = val.slice(0, start) + "[" + val.slice(start, end) + "]" + val.slice(end);
             input.setSelectionRange(start, end + 2);
           }
-          input.dispatchEvent(new Event("input"));
-          input.focus();
+          input.dispatchEvent(new Event("input")); input.focus();
         });
-      })(beatData);
+        bowBtn.addEventListener("click", function(){
+          var start = input.selectionStart, end = input.selectionEnd, val = input.value;
+          if (start === end){
+            input.value = val.slice(0, start) + "()" + val.slice(start);
+            input.setSelectionRange(start + 1, start + 1);
+          } else {
+            input.value = val.slice(0, start) + "(" + val.slice(start, end) + ")" + val.slice(end);
+            input.setSelectionRange(start, end + 2);
+          }
+          input.dispatchEvent(new Event("input")); input.focus();
+        });
 
-      input.addEventListener("input", function(ev){
-        var bd = lineObj.beats.find(function(x){ return x.el === ev.target; });
-        bd.raw = ev.target.value;
-        var oldTokens = bd.tokens;
-        var newTokens = parseBeat(bd.raw);
-        newTokens.forEach(function(nt, idx){
-          if (oldTokens[idx] && oldTokens[idx].letter === nt.letter) nt.octave = oldTokens[idx].octave;
+        input.addEventListener("input", function(ev){
+          var bd = lineObj.beats[cursorIdx];
+          bd.raw = ev.target.value;
+          var oldTokens = bd.tokens;
+          var prevPending = cursorIdx > 0 ? lineObj.beats[cursorIdx - 1].slurPending : false;
+          var result = parseBeat(bd.raw, prevPending);
+          result.tokens.forEach(function(nt, idx){
+            if (oldTokens[idx] && oldTokens[idx].letter === nt.letter) nt.octave = oldTokens[idx].octave;
+          });
+          bd.tokens = result.tokens;
+          bd.slurPending = result.slurPending;
+          renderChips(bd);
+          updateBeatVisual(bd);
+          validateAnga(lineObj, angaIdx);
+          // Cascade slur state to subsequent beats in this line
+          var nextIdx = cursorIdx + 1;
+          while (nextIdx < lineObj.beats.length){
+            var nextBd = lineObj.beats[nextIdx];
+            var pp = lineObj.beats[nextIdx - 1].slurPending;
+            var nr = parseBeat(nextBd.raw, pp);
+            var oldToks = nextBd.tokens;
+            nr.tokens.forEach(function(nt, idx){
+              if (oldToks[idx] && oldToks[idx].letter === nt.letter) nt.octave = oldToks[idx].octave;
+            });
+            var pendingChanged = nextBd.slurPending !== nr.slurPending;
+            nextBd.tokens = nr.tokens;
+            nextBd.slurPending = nr.slurPending;
+            renderChips(nextBd);
+            if (!pendingChanged) break;
+            nextIdx++;
+          }
+          scheduleSave();
         });
-        bd.tokens = newTokens;
-        renderChips(bd);
-        updateBeatVisual(bd);
-        validateAnga(lineObj, angaIdx);
-        scheduleSave();
-      });
+      })(beatData, bowBtn, input, splitBtn);
 
       beatBox.appendChild(input);
       beatBox.appendChild(chipWrap);
       beatBox.appendChild(countTag);
       beatBox.appendChild(splitBtn);
+      beatBox.appendChild(bowBtn);
       beatsRow.appendChild(beatBox);
     }
 
@@ -726,10 +768,16 @@ function loadSaved(){
 function tokensToRaw(tokens){
   var out = "";
   var inFast = false;
+  var inSlur = false;
   tokens.forEach(function(tok){
-    var isFast = !!tok.doubleSpeed;
-    if (isFast && !inFast){ out += "["; inFast = true; }
-    if (!isFast && inFast){ out += "]"; inFast = false; }
+    var isFast = !!tok.doubleSpeed && !tok.carry;
+    var isSlur = !!tok.slur && !tok.carry;
+    // Close inner brackets before outer
+    if (inFast && !isFast){ out += "]"; inFast = false; }
+    if (inSlur && !isSlur){ out += ")"; inSlur = false; }
+    // Open outer before inner
+    if (!inSlur && isSlur){ out += "("; inSlur = true; }
+    if (!inFast && isFast){ out += "["; inFast = true; }
     if (tok.carry){
       var remaining = tok.count;
       while (remaining >= 2){ out += ";"; remaining -= 2; }
@@ -746,6 +794,7 @@ function tokensToRaw(tokens){
     out += prefix + letter + ext;
   });
   if (inFast) out += "]";
+  if (inSlur) out += ")";
   return out;
 }
 
@@ -840,7 +889,7 @@ function beatStringToRestoreEntry(s){
   var octaves = [];
   while (i < s.length){
     var ch = s[i];
-    if (ch === "[" || ch === "]"){
+    if (ch === "[" || ch === "]" || ch === "(" || ch === ")"){
       plain += ch;
       i++;
     } else if (ch === "^" || ch === "_"){
@@ -1192,7 +1241,7 @@ function flattenBeats(linesArray){
         if (tok.carry){
           if (flat.length > 0) flat[flat.length - 1].count += dur;
         } else {
-          flat.push({ letter: tok.letter, count: dur, octave: tok.octave, variant: tok.variant, el: bd.el });
+          flat.push({ letter: tok.letter, count: dur, octave: tok.octave, variant: tok.variant, slur: !!tok.slur, el: bd.el });
         }
       });
     });
@@ -1219,26 +1268,38 @@ function playFlat(flat, onDone){
   var matraDur = 60 / (bpm * MATRAS_PER_BEAT);
   var t = 0;
 
-  flat.forEach(function(note){
+  for (var ni = 0; ni < flat.length; ni++){
+    var note = flat[ni];
     var dur = note.count * matraDur;
-    if (!note.letter){ t += dur; return; }
+    if (!note.letter){ t += dur; continue; }
 
     var base = (note.variant && VARIANT_FREQ[note.letter + note.variant])
       ? VARIANT_FREQ[note.letter + note.variant]
       : scaleFreqs[note.letter] || 261.63;
     var freq = note.octave === 1 ? base * 2 : note.octave === -1 ? base / 2 : base;
 
-    (function(freq, noteLetter, noteOctave, time, dur, el){
+    // Slur legato: don't re-attack mid-slur; don't release until end of slur
+    var prevNote = ni > 0 ? flat[ni - 1] : null;
+    var nextNote = ni < flat.length - 1 ? flat[ni + 1] : null;
+    var prevSlur = prevNote && prevNote.slur && prevNote.letter;
+    var nextSlur = nextNote && nextNote.slur;
+    var doAttack  = !note.slur || !prevSlur;
+    var doRelease = !note.slur || !nextSlur;
+
+    (function(freq, noteLetter, noteOctave, time, dur, el, doAtk, doRel){
       Tone.Transport.scheduleOnce(function(audioTime){
         var releaseDur = dur * (gamakaProfile ? 0.92 : 0.85);
 
-        synth.triggerAttack(freq, audioTime);
+        if (doAtk){
+          synth.triggerAttack(freq, audioTime);
+        } else {
+          synth.frequency.setValueAtTime(freq, audioTime);
+        }
 
         if (gamakaProfile) {
           var gk = gamakaProfile[noteLetter];
           if (gk) {
             if (gk.type === "jaru") {
-              // Slide from a neighbouring note's frequency into this note
               var fromBase = scaleFreqs[gk.fromLetter] || 261.63;
               var octMult = noteOctave === 1 ? 2 : noteOctave === -1 ? 0.5 : 1;
               var fromFreq = fromBase * octMult * Math.pow(2, gk.octaveShift || 0);
@@ -1246,7 +1307,6 @@ function playFlat(flat, onDone){
               synth.frequency.setValueAtTime(fromFreq, audioTime);
               synth.frequency.linearRampToValueAtTime(freq, audioTime + slideDur);
             } else if (gk.type === "kampita") {
-              // Oscillate above base pitch during sustain
               var hiFreq = freq * Math.pow(2, gk.cents / 1200);
               var halfPeriod = 0.5 / gk.rate;
               var kampStart = audioTime + 0.02;
@@ -1263,16 +1323,16 @@ function playFlat(flat, onDone){
           }
         }
 
-        synth.triggerRelease(audioTime + releaseDur);
+        if (doRel) synth.triggerRelease(audioTime + releaseDur);
 
         var origBg = el.style.background;
         el.style.background = "#cfe6fb";
         setTimeout(function(){ el.style.background = origBg; }, dur * 900);
       }, time);
-    })(freq, note.letter, note.octave, t, dur, note.el);
+    })(freq, note.letter, note.octave, t, dur, note.el, doAttack, doRelease);
 
     t += dur;
-  });
+  }
 
   Tone.Transport.bpm.value = 120;
   Tone.Transport.start("+0.05");
