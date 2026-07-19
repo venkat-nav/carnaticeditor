@@ -122,8 +122,9 @@
   .count-tag { font-size: 10px; color: var(--text-muted); }
   .anga-total { font-size: 11px; font-weight: 500; color: var(--text-muted); }
   .split-btn { font-size: 10px; height: 18px; padding: 0 6px; border-radius: 4px; margin-top: 1px; }
-  .chip.chip-fast { color: var(--text-accent); border-color: var(--text-accent); }
-  .chip.chip-slur { font-style: italic; color: #8b5cf6; border-color: #8b5cf6; }
+  .chip.chip-fast  { color: var(--text-accent); border-color: var(--text-accent); }
+  .chip.chip-slur  { font-style: italic; color: #8b5cf6; border-color: #8b5cf6; }
+  .chip.chip-janti { color: #0d9488; border-color: #0d9488; }
   .annot-input {
     width: 100%; font-size: 12px; font-weight: 600; color: var(--text-secondary);
     border: none; border-bottom: 1px dashed var(--border); border-radius: 0;
@@ -179,6 +180,7 @@
     Lowercase = 1 count, capital = 2 counts, <code>,</code> = +1, <code>;</code> = +2.
     A leading <code>,</code> or <code>;</code> carries the previous beat's note forward.
     Wrap notes in <code>[...]</code> to play them at double speed (each takes half a count). Use the <code>[2×]</code> button to wrap selected text.
+    Wrap in <code>(...)</code> for a single-bow legato slur. Wrap in <code>{...}</code> to mark janti swaras — the second occurrence of a repeated note will be played with a brief grace note from the scale degree below.
     Add a digit suffix for swara variants, e.g. <code>n3</code> or <code>r2</code>.
     Click a note chip below the box to cycle its octave (middle &rarr; upper dot &rarr; lower dot).
   </div>
@@ -291,17 +293,20 @@ var lines = [];
 var lineCounter = 0;
 var saveTimer = null;
 
-function parseBeat(raw, startInSlur){
+function parseBeat(raw, startInSlur, startInJanti){
   var tokens = [];
   var i = 0;
   var sawLetter = false;
   var inDouble = false;
   var inSlur = !!startInSlur;
+  var inJanti = !!startInJanti;
   while (i < raw.length){
     var ch = raw[i];
     if (ch === " "){ i++; continue; }
     if (ch === "("){ inSlur = true;  i++; continue; }
     if (ch === ")"){ inSlur = false; i++; continue; }
+    if (ch === "{"){ inJanti = true;  i++; continue; }
+    if (ch === "}"){ inJanti = false; i++; continue; }
     if (ch === "," || ch === ";"){
       if (!sawLetter){
         var carryCount = (ch === ",") ? 1 : 2;
@@ -330,9 +335,9 @@ function parseBeat(raw, startInSlur){
       count += (raw[i] === ",") ? 1 : 2;
       i++;
     }
-    tokens.push({ letter: letter, count: count, octave: 0, variant: variant, doubleSpeed: inDouble, slur: inSlur });
+    tokens.push({ letter: letter, count: count, octave: 0, variant: variant, doubleSpeed: inDouble, slur: inSlur, janti: inJanti });
   }
-  return { tokens: tokens, slurPending: inSlur };
+  return { tokens: tokens, slurPending: inSlur, jantiPending: inJanti };
 }
 
 function beatTotal(tokens){
@@ -366,8 +371,9 @@ function renderChips(bd){
       chip.innerHTML = lSpan + supHtml;
     }
     if (tok.doubleSpeed) chip.classList.add("chip-fast");
-    if (tok.slur) chip.classList.add("chip-slur");
-    chip.title = (tok.doubleSpeed ? "2\u00d7 speed \u2014 " : "") + (tok.slur ? "bow/slur \u2014 " : "") + (tok.variant ? tok.letter.toUpperCase() + tok.variant + " variant \u2014 " : "") + "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
+    if (tok.slur)  chip.classList.add("chip-slur");
+    if (tok.janti) chip.classList.add("chip-janti");
+    chip.title = (tok.doubleSpeed ? "2\u00d7 speed \u2014 " : "") + (tok.slur ? "bow/slur \u2014 " : "") + (tok.janti ? "janti \u2014 " : "") + (tok.variant ? tok.letter.toUpperCase() + tok.variant + " variant \u2014 " : "") + "click to change octave (currently " + (tok.octave===1?"upper":tok.octave===-1?"lower":"middle") + ")";
     chip.style.color = tok.octave === 1 ? "var(--text-accent)" : (tok.octave === -1 ? "var(--text-danger)" : "var(--text-primary)");
     chip.addEventListener("click", function(){
       tok.octave = tok.octave === 0 ? 1 : (tok.octave === 1 ? -1 : 0);
@@ -430,18 +436,26 @@ function buildLine(lineId, restoreBeats){
       bowBtn.textContent = "(bow)";
       bowBtn.title = "Wrap selected notes in ( ) for single-bow legato";
 
-      var beatData = { angaIdx: angaIdx, beatIdx: b, el: input, countEl: countTag, chipWrap: chipWrap, raw: "", tokens: [], slurPending: false };
+      var jantiMarkBtn = document.createElement("button");
+      jantiMarkBtn.type = "button";
+      jantiMarkBtn.className = "split-btn";
+      jantiMarkBtn.textContent = "{j}";
+      jantiMarkBtn.title = "Wrap selected notes in { } to mark janti swaras";
+
+      var beatData = { angaIdx: angaIdx, beatIdx: b, el: input, countEl: countTag, chipWrap: chipWrap, raw: "", tokens: [], slurPending: false, jantiPending: false };
       lineObj.beats.push(beatData);
 
-      (function(beatData, bowBtn, input, splitBtn){
+      (function(beatData, bowBtn, input, splitBtn, jantiMarkBtn){
         var cursorIdx = lineObj.beats.length - 1;
         if (restoreBeats && restoreBeats[cursorIdx]){
           beatData.raw = restoreBeats[cursorIdx].raw || "";
           input.value = beatData.raw;
           var prevPending = cursorIdx > 0 ? lineObj.beats[cursorIdx - 1].slurPending : false;
-          var result = parseBeat(beatData.raw, prevPending);
+          var prevJantiPending = cursorIdx > 0 ? lineObj.beats[cursorIdx - 1].jantiPending : false;
+          var result = parseBeat(beatData.raw, prevPending, prevJantiPending);
           beatData.tokens = result.tokens;
           beatData.slurPending = result.slurPending;
+          beatData.jantiPending = result.jantiPending;
           if (restoreBeats[cursorIdx].octaves){
             var nonCarry = beatData.tokens.filter(function(t){return !t.carry;});
             nonCarry.forEach(function(tok, ti){
@@ -474,46 +488,63 @@ function buildLine(lineId, restoreBeats){
           input.dispatchEvent(new Event("input")); input.focus();
         });
 
+        jantiMarkBtn.addEventListener("click", function(){
+          var start = input.selectionStart, end = input.selectionEnd, val = input.value;
+          if (start === end){
+            input.value = val.slice(0, start) + "{}" + val.slice(start);
+            input.setSelectionRange(start + 1, start + 1);
+          } else {
+            input.value = val.slice(0, start) + "{" + val.slice(start, end) + "}" + val.slice(end);
+            input.setSelectionRange(start, end + 2);
+          }
+          input.dispatchEvent(new Event("input")); input.focus();
+        });
+
         input.addEventListener("input", function(ev){
           var bd = lineObj.beats[cursorIdx];
           bd.raw = ev.target.value;
           var oldTokens = bd.tokens;
           var prevPending = cursorIdx > 0 ? lineObj.beats[cursorIdx - 1].slurPending : false;
-          var result = parseBeat(bd.raw, prevPending);
+          var prevJantiPending = cursorIdx > 0 ? lineObj.beats[cursorIdx - 1].jantiPending : false;
+          var result = parseBeat(bd.raw, prevPending, prevJantiPending);
           result.tokens.forEach(function(nt, idx){
             if (oldTokens[idx] && oldTokens[idx].letter === nt.letter) nt.octave = oldTokens[idx].octave;
           });
           bd.tokens = result.tokens;
           bd.slurPending = result.slurPending;
+          bd.jantiPending = result.jantiPending;
           renderChips(bd);
           updateBeatVisual(bd);
           validateAnga(lineObj, angaIdx);
-          // Cascade slur state to subsequent beats in this line
+          // Cascade slur and janti state to subsequent beats in this line
           var nextIdx = cursorIdx + 1;
           while (nextIdx < lineObj.beats.length){
             var nextBd = lineObj.beats[nextIdx];
             var pp = lineObj.beats[nextIdx - 1].slurPending;
-            var nr = parseBeat(nextBd.raw, pp);
+            var pj = lineObj.beats[nextIdx - 1].jantiPending;
+            var nr = parseBeat(nextBd.raw, pp, pj);
             var oldToks = nextBd.tokens;
             nr.tokens.forEach(function(nt, idx){
               if (oldToks[idx] && oldToks[idx].letter === nt.letter) nt.octave = oldToks[idx].octave;
             });
-            var pendingChanged = nextBd.slurPending !== nr.slurPending;
+            var pendingChanged = nextBd.slurPending !== nr.slurPending || nextBd.jantiPending !== nr.jantiPending;
             nextBd.tokens = nr.tokens;
             nextBd.slurPending = nr.slurPending;
+            nextBd.jantiPending = nr.jantiPending;
             renderChips(nextBd);
             if (!pendingChanged) break;
             nextIdx++;
           }
           scheduleSave();
         });
-      })(beatData, bowBtn, input, splitBtn);
+      })(beatData, bowBtn, input, splitBtn, jantiMarkBtn);
 
       beatBox.appendChild(input);
       beatBox.appendChild(chipWrap);
       beatBox.appendChild(countTag);
       beatBox.appendChild(splitBtn);
       beatBox.appendChild(bowBtn);
+      beatBox.appendChild(jantiMarkBtn);
       beatsRow.appendChild(beatBox);
     }
 
@@ -769,15 +800,19 @@ function tokensToRaw(tokens){
   var out = "";
   var inFast = false;
   var inSlur = false;
+  var inJanti = false;
   tokens.forEach(function(tok){
-    var isFast = !!tok.doubleSpeed && !tok.carry;
-    var isSlur = !!tok.slur && !tok.carry;
+    var isFast  = !!tok.doubleSpeed && !tok.carry;
+    var isSlur  = !!tok.slur  && !tok.carry;
+    var isJanti = !!tok.janti && !tok.carry;
     // Close inner brackets before outer
-    if (inFast && !isFast){ out += "]"; inFast = false; }
-    if (inSlur && !isSlur){ out += ")"; inSlur = false; }
+    if (inFast  && !isFast) { out += "]"; inFast  = false; }
+    if (inSlur  && !isSlur) { out += ")"; inSlur  = false; }
+    if (inJanti && !isJanti){ out += "}"; inJanti = false; }
     // Open outer before inner
-    if (!inSlur && isSlur){ out += "("; inSlur = true; }
-    if (!inFast && isFast){ out += "["; inFast = true; }
+    if (!inJanti && isJanti){ out += "{"; inJanti = true; }
+    if (!inSlur  && isSlur) { out += "("; inSlur  = true; }
+    if (!inFast  && isFast) { out += "["; inFast  = true; }
     if (tok.carry){
       var remaining = tok.count;
       while (remaining >= 2){ out += ";"; remaining -= 2; }
@@ -793,8 +828,9 @@ function tokensToRaw(tokens){
     while (extra >= 1){ ext += ","; extra -= 1; }
     out += prefix + letter + ext;
   });
-  if (inFast) out += "]";
-  if (inSlur) out += ")";
+  if (inFast)  out += "]";
+  if (inSlur)  out += ")";
+  if (inJanti) out += "}";
   return out;
 }
 
@@ -889,7 +925,7 @@ function beatStringToRestoreEntry(s){
   var octaves = [];
   while (i < s.length){
     var ch = s[i];
-    if (ch === "[" || ch === "]" || ch === "(" || ch === ")"){
+    if (ch === "[" || ch === "]" || ch === "(" || ch === ")" || ch === "{" || ch === "}"){
       plain += ch;
       i++;
     } else if (ch === "^" || ch === "_"){
@@ -1012,8 +1048,11 @@ function tokenToStr(tok){
   return l + ext;
 }
 
-function drawPdfBeat(doc, bd, x, y, beatW){
+function drawPdfBeat(doc, bd, x, y, beatW, startInSlur){
   if (bd.tokens.length === 0) return;
+  var baseSz = doc.getFontSize();
+
+  // Build parts array with janti flag
   var parts = [];
   var i = 0;
   while (i < bd.tokens.length){
@@ -1022,63 +1061,138 @@ function drawPdfBeat(doc, bd, x, y, beatW){
       var rem = tok.count, s = "";
       while (rem >= 2){ s += ";"; rem -= 2; }
       while (rem >= 1){ s += ","; rem -= 1; }
-      parts.push({ text: s, underline: false, octave: 0 });
+      parts.push({ text: s, underline: false, octave: 0, janti: false, slur: false, groupToks: null });
       i++; continue;
     }
     if (tok.doubleSpeed){
-      var group = ""; var groupToks = [];
+      var group = ""; var groupToks = []; var groupJanti = false; var groupSlur = false;
       while (i < bd.tokens.length && bd.tokens[i].doubleSpeed && !bd.tokens[i].carry){
-        group += tokenToStr(bd.tokens[i]); groupToks.push(bd.tokens[i]); i++;
+        group += tokenToStr(bd.tokens[i]);
+        groupToks.push(bd.tokens[i]);
+        if (bd.tokens[i].janti) groupJanti = true;
+        if (bd.tokens[i].slur)  groupSlur  = true;
+        i++;
       }
-      parts.push({ text: group, underline: true, octave: null, groupToks: groupToks });
+      parts.push({ text: group, underline: true, octave: null, janti: groupJanti, slur: groupSlur, groupToks: groupToks });
     } else {
-      parts.push({ text: tokenToStr(tok), underline: false, octave: tok.octave });
+      parts.push({ text: tokenToStr(tok), underline: false, octave: tok.octave, janti: !!tok.janti, slur: !!tok.slur, groupToks: null });
       i++;
     }
   }
+
+  // Measure widths with correct per-part font, store on part
   var totalW = 0;
   parts.forEach(function(p){
     doc.setFont("times", p.octave === 1 ? "bold" : "normal");
-    totalW += doc.getTextWidth(p.text);
+    p.w = doc.getTextWidth(p.text);
+    totalW += p.w;
   });
-  var cx = x + (beatW - totalW) / 2;
-  var baseSz = doc.getFontSize();
+
+  // Determine whether opening ( and/or closing ) will be drawn,
+  // and widen the effective content width so parens fit inside beatW.
+  doc.setFont("times", "normal");
+  var parenW = doc.getTextWidth("(");
+  var firstSlur = -1, lastSlur = -1;
+  parts.forEach(function(p, idx){ if (p.slur){ if (firstSlur < 0) firstSlur = idx; lastSlur = idx; } });
+  var needsOpen  = firstSlur >= 0 && (firstSlur > 0 || !startInSlur);
+  var needsClose = lastSlur  >= 0 && (lastSlur < parts.length - 1 || !bd.slurPending);
+  var extraLeft  = needsOpen  ? parenW : 0;
+  var extraRight = needsClose ? parenW : 0;
+
+  // Assign x positions with inter-letter spacing so parens have room
+  var LETTER_GAP = 1.2; // mm between each part
+  var totalGap = Math.max(0, parts.length - 1) * LETTER_GAP;
+  var startX = x + (beatW - totalW - totalGap - extraLeft - extraRight) / 2 + extraLeft;
+  var cur = startX;
+  parts.forEach(function(p, pp){
+    p.x = cur;
+    cur += p.w + (pp < parts.length - 1 ? LETTER_GAP : 0);
+  });
+
+  // Draw curved arc above each run of janti-marked parts
+  doc.setFont("times", "normal");
+  doc.setFontSize(baseSz);
+  var pi = 0;
+  while (pi < parts.length){
+    if (parts[pi].janti){
+      var arcX0 = parts[pi].x;
+      while (pi < parts.length && parts[pi].janti) pi++;
+      var arcX1 = parts[pi - 1].x + parts[pi - 1].w;
+      var w = arcX1 - arcX0;
+      var arcY = y - 5.5;
+      doc.setDrawColor(26, 26, 26);
+      doc.setLineWidth(0.25);
+      // Cubic bezier: control points bow up 2.5mm above the endpoints
+      doc.lines([[w * 0.15, -2.5, w * 0.85, -2.5, w, 0]], arcX0, arcY, [1, 1], 'S');
+      doc.setDrawColor(0);
+    } else {
+      pi++;
+    }
+  }
+
+  // Draw parentheses around slur groups
+  doc.setFont("times", "normal");
+  doc.setFontSize(baseSz);
+  doc.setTextColor(26, 26, 26);
+  var si = 0;
+  while (si < parts.length){
+    if (parts[si].slur){
+      var slurStart = si;
+      while (si < parts.length && parts[si].slur) si++;
+      var slurEnd = si - 1;
+      // Draw ( if this is where the slur opens (not continuing from previous beat)
+      var isSlurOpen  = slurStart > 0 || !startInSlur;
+      // Draw ) if this is where the slur closes (not continuing into next beat)
+      var isSlurClose = slurEnd < parts.length - 1 || !bd.slurPending;
+      if (isSlurOpen){
+        var openW = doc.getTextWidth("(");
+        doc.text("(", parts[slurStart].x - openW, y);
+      }
+      if (isSlurClose){
+        doc.text(")", parts[slurEnd].x + parts[slurEnd].w, y);
+      }
+    } else {
+      si++;
+    }
+  }
+
+  // Draw text, underlines, and octave dots
+  doc.setFontSize(baseSz);
   parts.forEach(function(p){
     doc.setFont("times", p.octave === 1 ? "bold" : "normal");
-    var tw = doc.getTextWidth(p.text);
-    doc.text(p.text, cx, y);
+    var tw = p.w;
+    doc.text(p.text, p.x, y);
     if (p.underline){
       doc.setDrawColor(26, 26, 26);
       doc.setLineWidth(0.25);
-      doc.line(cx, y + 0.8, cx + tw, y + 0.8);
+      doc.line(p.x, y + 0.8, p.x + tw, y + 0.8);
       doc.setDrawColor(0);
     }
     if (p.octave === 1){
       doc.setFontSize(11); doc.setFont("times", "bold");
-      doc.text("·", cx + tw / 2, y - 3.5, { align: "center" });
+      doc.text("·", p.x + tw / 2, y - 3.5, { align: "center" });
       doc.setFont("times", "normal"); doc.setFontSize(baseSz);
     } else if (p.octave === -1){
       doc.setFontSize(11);
-      doc.text("·", cx + tw / 2, y + 3.2, { align: "center" });
+      doc.text("·", p.x + tw / 2, y + 3.2, { align: "center" });
       doc.setFontSize(baseSz);
-    } else if (p.groupToks) {
-      var gx = cx;
+    } else if (p.groupToks){
+      var gx = p.x;
       p.groupToks.forEach(function(gt){
         doc.setFont("times", "normal");
         var gtw = doc.getTextWidth(tokenToStr(gt));
         if (gt.octave === 1){
-          doc.setFontSize(11); doc.setFont("times","bold");
-          doc.text("·", gx + gtw/2, y - 3.5, {align:"center"});
-          doc.setFont("times","normal"); doc.setFontSize(baseSz);
+          doc.setFontSize(11); doc.setFont("times", "bold");
+          doc.text("·", gx + gtw / 2, y - 3.5, { align: "center" });
+          doc.setFont("times", "normal"); doc.setFontSize(baseSz);
         } else if (gt.octave === -1){
           doc.setFontSize(11);
-          doc.text("·", gx + gtw/2, y + 3.2, {align:"center"});
+          doc.text("·", gx + gtw / 2, y + 3.2, { align: "center" });
           doc.setFontSize(baseSz);
         }
         gx += gtw;
       });
     }
-    cx += tw;
   });
   doc.setFont("times", "normal");
 }
@@ -1175,11 +1289,14 @@ exportPdfBtn.addEventListener("click", function(){
         x += dblBarW + EKA_SEP;
       }
       var beatIdx = 0;
+      var prevSlurPending = false;
       tala.angas.forEach(function(anga, angaIdx){
         doc.setFont("times", "normal");
         doc.setTextColor(26, 26, 26);
         for (var b = 0; b < anga.beats; b++){
-          drawPdfBeat(doc, lineObj.beats[beatIdx++], x, y, beatW);
+          var currBd = lineObj.beats[beatIdx++];
+          drawPdfBeat(doc, currBd, x, y, beatW, prevSlurPending);
+          prevSlurPending = currBd.slurPending;
           x += beatW;
         }
         if (angaIdx < tala.angas.length - 1){
@@ -1213,7 +1330,7 @@ exportPdfBtn.addEventListener("click", function(){
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(136, 135, 128);
-  doc.text("Dot above = upper octave · Dot below = lower octave · Underline = double speed (2×) · | divides angas · ‖ marks samam", ML, PH - 10);
+  doc.text("Dot above = upper octave · Dot below = lower octave · Underline = double speed (2×) · (...) = bow/slur · Arc above = janti · | divides angas · ‖ marks samam", ML, PH - 10);
 
   doc.save(name + ".pdf");
 });
@@ -1228,6 +1345,33 @@ gamakaBtn.addEventListener("click", function(){
   gamakaBtn.style.color = gamakaEnabled ? "var(--text-accent)" : "";
 });
 
+// Returns the frequency one scale degree below the given note (for janti grace note).
+function getJantiGraceFreq(letter, octave, scaleFreqs) {
+  var base = scaleFreqs[letter] || 261.63;
+  var targetFreq = octave === 1 ? base * 2 : octave === -1 ? base / 2 : base;
+
+  // Build a multi-octave sorted frequency list from the scale
+  var freqList = [];
+  [0.5, 1, 2, 4].forEach(function(mult){
+    Object.keys(scaleFreqs).forEach(function(l){ freqList.push(scaleFreqs[l] * mult); });
+  });
+  freqList.sort(function(a, b){ return a - b; });
+  // Remove near-duplicates
+  freqList = freqList.filter(function(f, i){ return i === 0 || (f - freqList[i-1]) > 0.5; });
+
+  // Find target (within 1%) and return one step below
+  for (var i = 1; i < freqList.length; i++){
+    if (Math.abs(freqList[i] - targetFreq) / targetFreq < 0.01){
+      return freqList[i - 1];
+    }
+  }
+  // Fallback: nearest freq below target
+  for (var j = freqList.length - 1; j >= 0; j--){
+    if (freqList[j] < targetFreq * 0.99) return freqList[j];
+  }
+  return targetFreq * 0.944; // one semitone below
+}
+
 function flattenBeats(linesArray){
   var flat = [];
   linesArray.forEach(function(lineObj){
@@ -1241,7 +1385,7 @@ function flattenBeats(linesArray){
         if (tok.carry){
           if (flat.length > 0) flat[flat.length - 1].count += dur;
         } else {
-          flat.push({ letter: tok.letter, count: dur, octave: tok.octave, variant: tok.variant, slur: !!tok.slur, el: bd.el });
+          flat.push({ letter: tok.letter, count: dur, octave: tok.octave, variant: tok.variant, slur: !!tok.slur, janti: !!tok.janti, el: bd.el });
         }
       });
     });
@@ -1286,14 +1430,39 @@ function playFlat(flat, onDone){
     var doAttack  = !note.slur || !prevSlur;
     var doRelease = !note.slur || !nextSlur;
 
-    (function(freq, noteLetter, noteOctave, time, dur, el, doAtk, doRel){
+    // Janti: note explicitly marked with {} AND same letter+octave as previous note.
+    // Skip if this note is the FIRST of a pair (next note is also janti with same letter/octave)
+    // so that only the second note of the pair gets the grace.
+    var isJantiFirst = note.janti
+      && nextNote && nextNote.janti
+      && nextNote.letter === note.letter
+      && nextNote.octave === note.octave;
+    var isJanti = note.janti
+      && !isJantiFirst
+      && prevNote && prevNote.letter !== null
+      && prevNote.letter === note.letter
+      && prevNote.octave === note.octave;
+    var graceFreq = isJanti ? getJantiGraceFreq(note.letter, note.octave, scaleFreqs) : freq;
+    var graceDur  = isJanti ? Math.min(dur * 0.18, 0.07) : 0;
+
+    (function(freq, graceFreq, graceDur, isJanti, noteLetter, noteOctave, time, dur, el, doAtk, doRel){
       Tone.Transport.scheduleOnce(function(audioTime){
         var releaseDur = dur * (gamakaProfile ? 0.92 : 0.85);
 
         if (doAtk){
-          synth.triggerAttack(freq, audioTime);
+          if (isJanti){
+            synth.triggerAttack(graceFreq, audioTime);
+            synth.frequency.linearRampToValueAtTime(freq, audioTime + graceDur);
+          } else {
+            synth.triggerAttack(freq, audioTime);
+          }
         } else {
-          synth.frequency.setValueAtTime(freq, audioTime);
+          if (isJanti){
+            synth.frequency.setValueAtTime(graceFreq, audioTime);
+            synth.frequency.linearRampToValueAtTime(freq, audioTime + graceDur);
+          } else {
+            synth.frequency.setValueAtTime(freq, audioTime);
+          }
         }
 
         if (gamakaProfile) {
@@ -1329,7 +1498,7 @@ function playFlat(flat, onDone){
         el.style.background = "#cfe6fb";
         setTimeout(function(){ el.style.background = origBg; }, dur * 900);
       }, time);
-    })(freq, note.letter, note.octave, t, dur, note.el, doAttack, doRelease);
+    })(freq, graceFreq, graceDur, isJanti, note.letter, note.octave, t, dur, note.el, doAttack, doRelease);
 
     t += dur;
   }
